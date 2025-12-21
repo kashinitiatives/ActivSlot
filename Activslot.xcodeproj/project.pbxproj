@@ -1,0 +1,532 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		001A00001 /* ActivslotApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A00011 /* ActivslotApp.swift */; };
+		001A00002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A00012 /* ContentView.swift */; };
+		001A00003 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A00013 /* MainTabView.swift */; };
+		001A00004 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A00014 /* HomeView.swift */; };
+		001A00005 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A00015 /* SettingsView.swift */; };
+		001A00006 /* OnboardingContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A00016 /* OnboardingContainerView.swift */; };
+		001A00007 /* ValuePropositionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A00017 /* ValuePropositionView.swift */; };
+		001A00008 /* PermissionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A00018 /* PermissionsView.swift */; };
+		001A00009 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A00019 /* PreferencesView.swift */; };
+		001A0000A /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A0001A /* HealthKitManager.swift */; };
+		001A0000B /* CalendarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A0001B /* CalendarManager.swift */; };
+		001A0000C /* MovementPlanManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A0001C /* MovementPlanManager.swift */; };
+		001A0000D /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A0001D /* NotificationManager.swift */; };
+		001A0000E /* UserPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A0001E /* UserPreferences.swift */; };
+		001A0000F /* MovementPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A0001F /* MovementPlan.swift */; };
+		001A00010 /* CalendarEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A00020 /* CalendarEvent.swift */; };
+		001A00021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 001A00031 /* Assets.xcassets */; };
+		72C9427F2EF86B0100CAFBCC /* CalendarSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C9427E2EF86B0100CAFBCC /* CalendarSelectionView.swift */; };
+		72C94280AAAA0001CAFBCC /* OutlookManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94281AAAA0001CAFBCC /* OutlookManager.swift */; };
+		72C94282AAAA0002CAFBCC /* MSAL in Frameworks */ = {isa = PBXBuildFile; productRef = 72C94283AAAA0002CAFBCC /* MSAL */; };
+		72C94285BBBB0001CAFBCC /* PersonalInsightsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94286BBBB0001CAFBCC /* PersonalInsightsManager.swift */; };
+		72C94287CCCC0001CAFBCC /* PlannedActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94288CCCC0001CAFBCC /* PlannedActivity.swift */; };
+		72C94289CCCC0002CAFBCC /* ActivslotCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C9428ACCCC0002CAFBCC /* ActivslotCalendarView.swift */; };
+		72C9428BCCCC0003CAFBCC /* ActivitySheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C9428CCCCC0003CAFBCC /* ActivitySheets.swift */; };
+		72C9428DCCCC0004CAFBCC /* CalendarSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C9428ECCCC0004CAFBCC /* CalendarSyncService.swift */; };
+		72C9428FDDDD0001CAFBCC /* ScheduledActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */; };
+		72C94291DDDD0002CAFBCC /* ScheduleActivitySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94292DDDD0002CAFBCC /* ScheduleActivitySheet.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		001A00011 /* ActivslotApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivslotApp.swift; sourceTree = "<group>"; };
+		001A00012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		001A00013 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		001A00014 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		001A00015 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		001A00016 /* OnboardingContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingContainerView.swift; sourceTree = "<group>"; };
+		001A00017 /* ValuePropositionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValuePropositionView.swift; sourceTree = "<group>"; };
+		001A00018 /* PermissionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsView.swift; sourceTree = "<group>"; };
+		001A00019 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
+		001A0001A /* HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitManager.swift; sourceTree = "<group>"; };
+		001A0001B /* CalendarManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarManager.swift; sourceTree = "<group>"; };
+		001A0001C /* MovementPlanManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovementPlanManager.swift; sourceTree = "<group>"; };
+		001A0001D /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		001A0001E /* UserPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPreferences.swift; sourceTree = "<group>"; };
+		001A0001F /* MovementPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovementPlan.swift; sourceTree = "<group>"; };
+		001A00020 /* CalendarEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEvent.swift; sourceTree = "<group>"; };
+		001A00031 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		001A00032 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		001A00033 /* Activslot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Activslot.entitlements; sourceTree = "<group>"; };
+		001A00040 /* Activslot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Activslot.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		72C9427E2EF86B0100CAFBCC /* CalendarSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSelectionView.swift; sourceTree = "<group>"; };
+		72C94281AAAA0001CAFBCC /* OutlookManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutlookManager.swift; sourceTree = "<group>"; };
+		72C94286BBBB0001CAFBCC /* PersonalInsightsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalInsightsManager.swift; sourceTree = "<group>"; };
+		72C94288CCCC0001CAFBCC /* PlannedActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannedActivity.swift; sourceTree = "<group>"; };
+		72C9428ACCCC0002CAFBCC /* ActivslotCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivslotCalendarView.swift; sourceTree = "<group>"; };
+		72C9428CCCCC0003CAFBCC /* ActivitySheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivitySheets.swift; sourceTree = "<group>"; };
+		72C9428ECCCC0004CAFBCC /* CalendarSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSyncService.swift; sourceTree = "<group>"; };
+		72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledActivityManager.swift; sourceTree = "<group>"; };
+		72C94292DDDD0002CAFBCC /* ScheduleActivitySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleActivitySheet.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		001A00050 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				72C94282AAAA0002CAFBCC /* MSAL in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		001A00060 = {
+			isa = PBXGroup;
+			children = (
+				001A00070 /* Activslot */,
+				001A00080 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		001A00070 /* Activslot */ = {
+			isa = PBXGroup;
+			children = (
+				001A00071 /* App */,
+				001A00072 /* Managers */,
+				001A00073 /* Models */,
+				001A00074 /* Views */,
+				001A00031 /* Assets.xcassets */,
+				001A00032 /* Info.plist */,
+				001A00033 /* Activslot.entitlements */,
+			);
+			path = Activslot;
+			sourceTree = "<group>";
+		};
+		001A00071 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				001A00011 /* ActivslotApp.swift */,
+				001A00012 /* ContentView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		001A00072 /* Managers */ = {
+			isa = PBXGroup;
+			children = (
+				001A0001A /* HealthKitManager.swift */,
+				001A0001B /* CalendarManager.swift */,
+				001A0001C /* MovementPlanManager.swift */,
+				001A0001D /* NotificationManager.swift */,
+				72C94281AAAA0001CAFBCC /* OutlookManager.swift */,
+				72C94286BBBB0001CAFBCC /* PersonalInsightsManager.swift */,
+				72C9428ECCCC0004CAFBCC /* CalendarSyncService.swift */,
+				72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */,
+			);
+			path = Managers;
+			sourceTree = "<group>";
+		};
+		001A00073 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				001A0001E /* UserPreferences.swift */,
+				001A0001F /* MovementPlan.swift */,
+				001A00020 /* CalendarEvent.swift */,
+				72C94288CCCC0001CAFBCC /* PlannedActivity.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		001A00074 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				001A00013 /* MainTabView.swift */,
+				001A00075 /* Home */,
+				001A00078 /* Calendar */,
+				001A00076 /* Onboarding */,
+				001A00077 /* Settings */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		001A00078 /* Calendar */ = {
+			isa = PBXGroup;
+			children = (
+				72C9428ACCCC0002CAFBCC /* ActivslotCalendarView.swift */,
+				72C9428CCCCC0003CAFBCC /* ActivitySheets.swift */,
+			);
+			path = Calendar;
+			sourceTree = "<group>";
+		};
+		001A00075 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				001A00014 /* HomeView.swift */,
+				72C94292DDDD0002CAFBCC /* ScheduleActivitySheet.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		001A00076 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				001A00016 /* OnboardingContainerView.swift */,
+				001A00017 /* ValuePropositionView.swift */,
+				001A00018 /* PermissionsView.swift */,
+				001A00019 /* PreferencesView.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		001A00077 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				001A00015 /* SettingsView.swift */,
+				72C9427E2EF86B0100CAFBCC /* CalendarSelectionView 2.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		001A00080 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				001A00040 /* Activslot.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		001A00090 /* Activslot */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 001A000B0 /* Build configuration list for PBXNativeTarget "Activslot" */;
+			buildPhases = (
+				001A00091 /* Sources */,
+				001A00050 /* Frameworks */,
+				001A00092 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Activslot;
+			packageProductDependencies = (
+				72C94283AAAA0002CAFBCC /* MSAL */,
+			);
+			productName = Activslot;
+			productReference = 001A00040 /* Activslot.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		001A000A0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					001A00090 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 001A000A1 /* Build configuration list for PBXProject "Activslot" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 001A00060;
+			productRefGroup = 001A00080 /* Products */;
+			packageReferences = (
+				72C94284AAAA0003CAFBCC /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */,
+			);
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				001A00090 /* Activslot */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		001A00092 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				001A00021 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		001A00091 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				001A00001 /* ActivslotApp.swift in Sources */,
+				001A00002 /* ContentView.swift in Sources */,
+				001A00003 /* MainTabView.swift in Sources */,
+				001A00004 /* HomeView.swift in Sources */,
+				001A00005 /* SettingsView.swift in Sources */,
+				001A00006 /* OnboardingContainerView.swift in Sources */,
+				72C9427F2EF86B0100CAFBCC /* CalendarSelectionView 2.swift in Sources */,
+				001A00007 /* ValuePropositionView.swift in Sources */,
+				001A00008 /* PermissionsView.swift in Sources */,
+				001A00009 /* PreferencesView.swift in Sources */,
+				001A0000A /* HealthKitManager.swift in Sources */,
+				001A0000B /* CalendarManager.swift in Sources */,
+				001A0000C /* MovementPlanManager.swift in Sources */,
+				001A0000D /* NotificationManager.swift in Sources */,
+				001A0000E /* UserPreferences.swift in Sources */,
+				001A0000F /* MovementPlan.swift in Sources */,
+				001A00010 /* CalendarEvent.swift in Sources */,
+				72C94280AAAA0001CAFBCC /* OutlookManager.swift in Sources */,
+				72C94285BBBB0001CAFBCC /* PersonalInsightsManager.swift in Sources */,
+				72C94287CCCC0001CAFBCC /* PlannedActivity.swift in Sources */,
+				72C94289CCCC0002CAFBCC /* ActivslotCalendarView.swift in Sources */,
+				72C9428BCCCC0003CAFBCC /* ActivitySheets.swift in Sources */,
+				72C9428DCCCC0004CAFBCC /* CalendarSyncService.swift in Sources */,
+				72C9428FDDDD0001CAFBCC /* ScheduledActivityManager.swift in Sources */,
+				72C94291DDDD0002CAFBCC /* ScheduleActivitySheet.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		001A000C0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		001A000C1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		001A000D0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Activslot/Activslot.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3W37J33N79;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Activslot/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Activslot;
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "Activslot needs access to your calendar to find walkable meetings and suggest the best times for your gym sessions.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Activslot needs access to your health data to track your daily steps, workouts, and active energy to help you plan your movement.";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.activslot.healthapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		001A000D1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Activslot/Activslot.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3W37J33N79;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Activslot/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Activslot;
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "Activslot needs access to your calendar to find walkable meetings and suggest the best times for your gym sessions.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Activslot needs access to your health data to track your daily steps, workouts, and active energy to help you plan your movement.";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.activslot.healthapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		001A000A1 /* Build configuration list for PBXProject "Activslot" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				001A000C0 /* Debug */,
+				001A000C1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		001A000B0 /* Build configuration list for PBXNativeTarget "Activslot" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				001A000D0 /* Debug */,
+				001A000D1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		72C94284AAAA0003CAFBCC /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AzureAD/microsoft-authentication-library-for-objc";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.3.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		72C94283AAAA0002CAFBCC /* MSAL */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 72C94284AAAA0003CAFBCC /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */;
+			productName = MSAL;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 001A000A0 /* Project object */;
+}
