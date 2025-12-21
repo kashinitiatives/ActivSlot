@@ -170,18 +170,19 @@ class MovementPlanManager: ObservableObject {
 
     // MARK: - Best Slot Finding (Based on Patterns)
 
-    /// Find the best walk slot based on user's past patterns
+    /// Find the best walk slot based on user's past patterns or preferred time
     private func findBestWalkSlot(for date: Date) async -> StepSlot? {
+        let calendar = Calendar.current
+        let events = (try? await calendarManager.fetchEvents(for: date)) ?? []
+
         // First check if there's a pattern-based suggestion
         if let patternTime = scheduledActivityManager.getBestTimeSuggestion(for: .walk, on: date, duration: 30) {
-            // Verify this time is still available
-            let events = (try? await calendarManager.fetchEvents(for: date)) ?? []
             let conflictsWithEvent = events.contains { event in
                 patternTime >= event.startDate && patternTime < event.endDate
             }
 
             if !conflictsWithEvent && userPreferences.isWithinBufferedActiveHours(patternTime) {
-                let endTime = Calendar.current.date(byAdding: .minute, value: 30, to: patternTime) ?? patternTime
+                let endTime = calendar.date(byAdding: .minute, value: 30, to: patternTime) ?? patternTime
                 return StepSlot(
                     startTime: patternTime,
                     endTime: endTime,
@@ -192,9 +193,147 @@ class MovementPlanManager: ObservableObject {
             }
         }
 
-        // Fall back to finding a free slot based on preference
+        // Create a slot based on preferred walk time
+        let preferredSlot = createPreferredTimeWalkSlot(for: date, events: events)
+        if preferredSlot != nil {
+            return preferredSlot
+        }
+
+        // Fall back to finding a free slot
         let freeSlots = await findFreeTimeWalkSlots(for: date)
         return freeSlots.first
+    }
+
+    /// Create a walk slot based on user's preferred walk time
+    private func createPreferredTimeWalkSlot(for date: Date, events: [CalendarEvent]) -> StepSlot? {
+        let calendar = Calendar.current
+        let preferredTime = userPreferences.preferredWalkTime
+
+        // Determine the ideal start hour based on preference
+        let idealHour: Int
+        let slotDescription: String
+
+        switch preferredTime {
+        case .morning:
+            // After workout if both morning, or early morning
+            if userPreferences.preferredGymTime == .morning && userPreferences.hasWorkoutGoal {
+                // Walk after workout: 7 AM workout (1hr) -> 8 AM walk
+                idealHour = 8
+            } else {
+                idealHour = 7
+            }
+            slotDescription = "Morning walk"
+        case .afternoon:
+            idealHour = 13 // 1 PM
+            slotDescription = "Afternoon walk"
+        case .evening:
+            idealHour = 18 // 6 PM
+            slotDescription = "Evening walk"
+        case .noPreference:
+            // Default to morning
+            idealHour = 8
+            slotDescription = "Morning walk"
+        }
+
+        // Create the preferred time slot
+        var components = calendar.dateComponents([.year, .month, .day], from: date)
+        components.hour = idealHour
+        components.minute = 0
+
+        guard let startTime = calendar.date(from: components) else { return nil }
+
+        // Duration for 10k steps goal: ~100 steps/min, so 60-90 min walk
+        // But we'll suggest 45 min as a reasonable walk
+        let walkDuration = 45
+        guard let endTime = calendar.date(byAdding: .minute, value: walkDuration, to: startTime) else { return nil }
+
+        // Check if this conflicts with any event
+        let conflictsWithEvent = events.contains { event in
+            // Check if walk slot overlaps with event
+            (startTime < event.endDate && endTime > event.startDate)
+        }
+
+        if conflictsWithEvent {
+            // Try to find next available slot in the preferred time range
+            return findNextAvailableSlotInPreferredRange(for: date, events: events, preferredTime: preferredTime)
+        }
+
+        // Verify within active hours
+        guard userPreferences.isWithinBufferedActiveHours(startTime) else { return nil }
+
+        // Skip meal times
+        if userPreferences.isDuringMeal(startTime) {
+            return findNextAvailableSlotInPreferredRange(for: date, events: events, preferredTime: preferredTime)
+        }
+
+        return StepSlot(
+            startTime: startTime,
+            endTime: endTime,
+            slotType: .freeTime,
+            targetSteps: walkDuration * 100, // 100 steps per minute
+            source: slotDescription
+        )
+    }
+
+    /// Find next available slot within the preferred time range
+    private func findNextAvailableSlotInPreferredRange(for date: Date, events: [CalendarEvent], preferredTime: PreferredWalkTime) -> StepSlot? {
+        let calendar = Calendar.current
+
+        // Define the preferred time range
+        let (rangeStart, rangeEnd, description): (Int, Int, String)
+        switch preferredTime {
+        case .morning:
+            rangeStart = 6
+            rangeEnd = 11
+            description = "Morning walk"
+        case .afternoon:
+            rangeStart = 12
+            rangeEnd = 17
+            description = "Afternoon walk"
+        case .evening:
+            rangeStart = 17
+            rangeEnd = 21
+            description = "Evening walk"
+        case .noPreference:
+            rangeStart = 7
+            rangeEnd = 20
+            description = "Walk break"
+        }
+
+        // Try each hour in the range
+        for hour in rangeStart..<rangeEnd {
+            var components = calendar.dateComponents([.year, .month, .day], from: date)
+            components.hour = hour
+            components.minute = 0
+
+            guard let startTime = calendar.date(from: components),
+                  let endTime = calendar.date(byAdding: .minute, value: 45, to: startTime) else {
+                continue
+            }
+
+            // Skip if outside active hours
+            guard userPreferences.isWithinBufferedActiveHours(startTime) else { continue }
+
+            // Skip meal times
+            if userPreferences.isDuringMeal(startTime) { continue }
+
+            // Check for conflicts
+            let conflicts = events.contains { event in
+                startTime < event.endDate && endTime > event.startDate
+            }
+
+            if !conflicts {
+                return StepSlot(
+                    startTime: startTime,
+                    endTime: endTime,
+                    slotType: .freeTime,
+                    targetSteps: 4500, // 45 min * 100 steps
+                    source: description
+                )
+            }
+        }
+
+        return nil
     }
 
     // MARK: - Free Time Walk Slots
@@ -339,33 +478,36 @@ class MovementPlanManager: ObservableObject {
     }
 
     private func findBestWorkoutSlot(for date: Date) async -> WorkoutSlot? {
+        let calendar = Calendar.current
+        let preferredTime = userPreferences.preferredGymTime
+        let events = (try? await calendarManager.fetchEvents(for: date)) ?? []
+        let duration = userPreferences.workoutDuration.rawValue
+        let nextWorkoutType = getNextWorkoutType()
+
+        // First, try to create a slot based on preferred time
+        if let preferredSlot = createPreferredTimeWorkoutSlot(for: date, events: events) {
+            return preferredSlot
+        }
+
+        // Fall back to finding free slots from calendar
         guard let freeSlots = try? await calendarManager.findFreeSlots(
             for: date,
-            minimumDuration: userPreferences.workoutDuration.rawValue
+            minimumDuration: duration
         ) else {
             return nil
         }
 
-        let calendar = Calendar.current
-        let preferredTime = userPreferences.preferredGymTime
-
         // Check if it's a light day
-        let events = (try? await calendarManager.fetchEvents(for: date)) ?? []
         let isLightDay = events.count <= 3
 
         // Filter valid slots first
         let validSlots = freeSlots.filter { slot in
-            // Skip if outside buffered active hours (1 hour after wake, 1 hour before sleep)
-            // Users can still manually add activities in these buffer times
             if !userPreferences.isWithinBufferedActiveHours(slot.start) {
                 return false
             }
-
-            // Skip if during meal time
             if userPreferences.isDuringMeal(slot.start) {
                 return false
             }
-
             return true
         }
 
@@ -376,32 +518,27 @@ class MovementPlanManager: ObservableObject {
 
         switch preferredTime {
         case .morning:
-            // Pick the earliest morning slot (5-10 AM)
             bestSlot = validSlots.first { slot in
                 let hour = calendar.component(.hour, from: slot.start)
                 return hour >= 5 && hour < 10
-            } ?? validSlots.first // Fallback to first available
+            } ?? validSlots.first
 
         case .afternoon:
-            // Pick the earliest afternoon slot (12-17)
             bestSlot = validSlots.first { slot in
                 let hour = calendar.component(.hour, from: slot.start)
                 return hour >= 12 && hour < 17
             } ?? validSlots.first
 
         case .evening:
-            // Pick the earliest evening slot (17-21)
             bestSlot = validSlots.first { slot in
                 let hour = calendar.component(.hour, from: slot.start)
                 return hour >= 17 && hour < 21
-            } ?? validSlots.last // Fallback to last available (likely later in day)
+            } ?? validSlots.last
 
         case .noPreference:
             if isLightDay {
-                // On light days, pick early slot to get it done
                 bestSlot = validSlots.first
             } else {
-                // On busy days, prefer morning or evening
                 bestSlot = validSlots.first { slot in
                     let hour = calendar.component(.hour, from: slot.start)
                     return (hour >= 5 && hour < 9) || (hour >= 17 && hour < 21)
@@ -411,8 +548,6 @@ class MovementPlanManager: ObservableObject {
 
         guard let selectedSlot = bestSlot else { return nil }
 
-        let nextWorkoutType = getNextWorkoutType()
-        let duration = userPreferences.workoutDuration.rawValue
         let endTime = calendar.date(byAdding: .minute, value: duration, to: selectedSlot.start) ?? selectedSlot.end
 
         return WorkoutSlot(
@@ -421,6 +556,122 @@ class MovementPlanManager: ObservableObject {
             workoutType: nextWorkoutType,
             isRecommended: true
         )
+    }
+
+    /// Create a workout slot based on user's preferred gym time
+    private func createPreferredTimeWorkoutSlot(for date: Date, events: [CalendarEvent]) -> WorkoutSlot? {
+        let calendar = Calendar.current
+        let preferredTime = userPreferences.preferredGymTime
+        let duration = userPreferences.workoutDuration.rawValue
+        let nextWorkoutType = getNextWorkoutType()
+
+        // Determine the ideal start hour based on preference
+        let idealHour: Int
+
+        switch preferredTime {
+        case .morning:
+            // Morning workout at 7 AM (before walk if both morning)
+            idealHour = 7
+        case .afternoon:
+            idealHour = 13 // 1 PM
+        case .evening:
+            idealHour = 18 // 6 PM
+        case .noPreference:
+            // Default to morning
+            idealHour = 7
+        }
+
+        // Create the preferred time slot
+        var components = calendar.dateComponents([.year, .month, .day], from: date)
+        components.hour = idealHour
+        components.minute = 0
+
+        guard let startTime = calendar.date(from: components),
+              let endTime = calendar.date(byAdding: .minute, value: duration, to: startTime) else {
+            return nil
+        }
+
+        // Check if this conflicts with any event
+        let conflictsWithEvent = events.contains { event in
+            (startTime < event.endDate && endTime > event.startDate)
+        }
+
+        if conflictsWithEvent {
+            return findNextAvailableWorkoutSlot(for: date, events: events, preferredTime: preferredTime)
+        }
+
+        // Verify within active hours
+        guard userPreferences.isWithinBufferedActiveHours(startTime) else { return nil }
+
+        // Skip meal times
+        if userPreferences.isDuringMeal(startTime) {
+            return findNextAvailableWorkoutSlot(for: date, events: events, preferredTime: preferredTime)
+        }
+
+        return WorkoutSlot(
+            startTime: startTime,
+            endTime: endTime,
+            workoutType: nextWorkoutType,
+            isRecommended: true
+        )
+    }
+
+    /// Find next available workout slot within the preferred time range
+    private func findNextAvailableWorkoutSlot(for date: Date, events: [CalendarEvent], preferredTime: PreferredGymTime) -> WorkoutSlot? {
+        let calendar = Calendar.current
+        let duration = userPreferences.workoutDuration.rawValue
+        let nextWorkoutType = getNextWorkoutType()
+
+        // Define the preferred time range
+        let (rangeStart, rangeEnd): (Int, Int)
+        switch preferredTime {
+        case .morning:
+            rangeStart = 5
+            rangeEnd = 11
+        case .afternoon:
+            rangeStart = 12
+            rangeEnd = 17
+        case .evening:
+            rangeStart = 17
+            rangeEnd = 21
+        case .noPreference:
+            rangeStart = 6
+            rangeEnd = 21
+        }
+
+        // Try each hour in the range
+        for hour in rangeStart..<rangeEnd {
+            var components = calendar.dateComponents([.year, .month, .day], from: date)
+            components.hour = hour
+            components.minute = 0
+
+            guard let startTime = calendar.date(from: components),
+                  let endTime = calendar.date(byAdding: .minute, value: duration, to: startTime) else {
+                continue
+            }
+
+            // Skip if outside active hours
+            guard userPreferences.isWithinBufferedActiveHours(startTime) else { continue }
+
+            // Skip meal times
+            if userPreferences.isDuringMeal(startTime) { continue }
+
+            // Check for conflicts
+            let conflicts = events.contains { event in
+                startTime < event.endDate && endTime > event.startDate
+            }
+
+            if !conflicts {
+                return WorkoutSlot(
+                    startTime: startTime,
+                    endTime: endTime,
+                    workoutType: nextWorkoutType,
+                    isRecommended: true
+                )
+            }
+        }
+
+        return nil
     }
 
     func getNextWorkoutType() -> WorkoutType {

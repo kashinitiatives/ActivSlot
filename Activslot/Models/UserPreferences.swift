@@ -115,8 +115,8 @@ class UserPreferences: ObservableObject {
     // MARK: - Workout Preferences
     @AppStorage("gymFrequency") var gymFrequencyRaw: Int = 0  // Default to "not set"
     @AppStorage("workoutDuration") var workoutDurationRaw: Int = 45
-    @AppStorage("preferredGymTime") var preferredGymTimeRaw: String = "No Preference"
-    @AppStorage("preferredWalkTime") var preferredWalkTimeRaw: String = "No Preference"
+    @AppStorage("preferredGymTime") var preferredGymTimeRaw: String = "Morning"
+    @AppStorage("preferredWalkTime") var preferredWalkTimeRaw: String = "Morning"
     @AppStorage("dailyStepGoal") var dailyStepGoal: Int = 10000
 
     // MARK: - Time Preferences (stored as JSON)
