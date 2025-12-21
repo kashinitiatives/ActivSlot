@@ -119,7 +119,8 @@ class MovementPlanManager: ObservableObject {
             if needsWorkoutSuggestion {
                 workoutSlot = allocation.workoutSlot
 
-                if Calendar.current.isDateInToday(date) || Calendar.current.isDateInTomorrow(date) {
+                // Only set suggested slot for today (not tomorrow, to avoid overwriting)
+                if Calendar.current.isDateInToday(date) {
                     await MainActor.run {
                         self.suggestedWorkoutSlot = allocation.workoutSlot
                     }
@@ -128,7 +129,8 @@ class MovementPlanManager: ObservableObject {
 
             // Set the suggested walk slot
             if needsWalkSuggestion {
-                if Calendar.current.isDateInToday(date) || Calendar.current.isDateInTomorrow(date) {
+                // Only set suggested slot for today (not tomorrow, to avoid overwriting)
+                if Calendar.current.isDateInToday(date) {
                     await MainActor.run {
                         self.suggestedWalkSlot = allocation.walkSlot
                     }

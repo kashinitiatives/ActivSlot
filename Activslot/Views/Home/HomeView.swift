@@ -71,10 +71,12 @@ struct HomeView: View {
 
                     // Suggested Slots Section (only if no scheduled activities)
                     if scheduledForDay.isEmpty {
+                        let currentPlan = selectedDay == .today ? planManager.todayPlan : planManager.tomorrowPlan
                         SuggestedSlotsSection(
-                            suggestedWalk: planManager.suggestedWalkSlot,
-                            suggestedWorkout: planManager.suggestedWorkoutSlot,
+                            suggestedWalk: currentPlan?.stepSlots.first,
+                            suggestedWorkout: currentPlan?.workoutSlot,
                             hasWorkoutGoal: userPreferences.hasWorkoutGoal,
+                            isToday: selectedDay == .today,
                             onScheduleWalk: { showScheduleWalk = true },
                             onScheduleWorkout: { showScheduleWorkout = true }
                         )
@@ -131,7 +133,8 @@ struct HomeView: View {
                 .environmentObject(calendarManager)
             }
             .sheet(isPresented: $showScheduleWalk) {
-                if let walkSlot = planManager.suggestedWalkSlot {
+                let currentPlan = selectedDay == .today ? planManager.todayPlan : planManager.tomorrowPlan
+                if let walkSlot = currentPlan?.stepSlots.first {
                     ScheduleActivitySheet(
                         activityType: .walk,
                         suggestedTime: walkSlot.startTime,
@@ -143,7 +146,8 @@ struct HomeView: View {
                 }
             }
             .sheet(isPresented: $showScheduleWorkout) {
-                if let workoutSlot = planManager.suggestedWorkoutSlot {
+                let currentPlan = selectedDay == .today ? planManager.todayPlan : planManager.tomorrowPlan
+                if let workoutSlot = currentPlan?.workoutSlot {
                     ScheduleActivitySheet(
                         activityType: .workout,
                         suggestedTime: workoutSlot.startTime,
@@ -935,12 +939,13 @@ struct SuggestedSlotsSection: View {
     let suggestedWalk: StepSlot?
     let suggestedWorkout: WorkoutSlot?
     let hasWorkoutGoal: Bool
+    var isToday: Bool = true
     var onScheduleWalk: () -> Void
     var onScheduleWorkout: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Suggested for Today")
+            Text(isToday ? "Suggested for Today" : "Suggested for Tomorrow")
                 .font(.headline)
 
             // Suggested Walk
