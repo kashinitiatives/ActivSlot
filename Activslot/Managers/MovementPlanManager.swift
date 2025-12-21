@@ -448,18 +448,24 @@ class MovementPlanManager: ObservableObject {
         let calendar = Calendar.current
         let preferredTime = userPreferences.preferredWalkTime
 
+        // Get wake time + 1 hour buffer (earliest allowed auto-suggestion time)
+        let wakeHour = userPreferences.wakeTime.hour
+        let earliestHour = wakeHour + 1  // 1 hour after wake
+
         // Determine the ideal start hour based on preference
         let idealHour: Int
         let slotDescription: String
 
         switch preferredTime {
         case .morning:
-            // After workout if both morning, or early morning
+            // Morning walk should be after wake buffer (1 hour after wake time)
+            // If workout is also morning, walk comes after workout
             if userPreferences.preferredGymTime == .morning && userPreferences.hasWorkoutGoal {
-                // Walk after workout: 7 AM workout (1hr) -> 8 AM walk
-                idealHour = 8
+                // Workout at wake+1hr, walk at wake+2hr (e.g., 7AM wake -> 8AM workout -> 9AM walk)
+                idealHour = max(earliestHour + 1, 9) // Walk after workout
             } else {
-                idealHour = 7
+                // No workout or workout not in morning - walk at earliest allowed time
+                idealHour = max(earliestHour, 8)
             }
             slotDescription = "Morning walk"
         case .afternoon:
@@ -469,8 +475,8 @@ class MovementPlanManager: ObservableObject {
             idealHour = 18 // 6 PM
             slotDescription = "Evening walk"
         case .noPreference:
-            // Default to morning
-            idealHour = 8
+            // Default to morning at earliest allowed time
+            idealHour = max(earliestHour, 8)
             slotDescription = "Morning walk"
         }
 
@@ -605,20 +611,25 @@ class MovementPlanManager: ObservableObject {
         let duration = userPreferences.workoutDuration.rawValue
         let nextWorkoutType = getNextWorkoutType()
 
+        // Get wake time + 1 hour buffer (earliest allowed auto-suggestion time)
+        let wakeHour = userPreferences.wakeTime.hour
+        let earliestHour = wakeHour + 1  // 1 hour after wake
+
         // Determine the ideal start hour based on preference
         let idealHour: Int
 
         switch preferredTime {
         case .morning:
-            // Morning workout at 7 AM (before walk if both morning)
-            idealHour = 7
+            // Morning workout at earliest allowed time (wake + 1 hour buffer)
+            // e.g., 7AM wake -> 8AM workout
+            idealHour = max(earliestHour, 8)
         case .afternoon:
             idealHour = 13 // 1 PM
         case .evening:
             idealHour = 18 // 6 PM
         case .noPreference:
-            // Default to morning
-            idealHour = 7
+            // Default to morning at earliest allowed time
+            idealHour = max(earliestHour, 8)
         }
 
         // Create the preferred time slot

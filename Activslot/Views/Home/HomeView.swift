@@ -1283,21 +1283,34 @@ struct CombinedCalendarView: View {
     }
 
     private func syncToCalendars(_ calendarIDs: [String]) async {
+        guard let plan = plan else { return }
+
         isSyncing = true
         defer { isSyncing = false }
 
-        // TODO: Implement actual calendar sync using CalendarSyncService
-        // For now, just show success animation
-        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
+        do {
+            // Use CalendarSyncService to sync the plan's activities
+            try await CalendarSyncService.shared.syncMovementPlan(
+                stepSlots: plan.stepSlots,
+                workoutSlot: plan.workoutSlot,
+                toCalendars: calendarIDs
+            )
 
-        await MainActor.run {
-            syncSuccess = true
-        }
+            await MainActor.run {
+                syncSuccess = true
+            }
 
-        // Reset success state after 2 seconds
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
-        await MainActor.run {
-            syncSuccess = false
+            // Reset success state after 2 seconds
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run {
+                syncSuccess = false
+            }
+        } catch {
+            print("Sync failed: \(error)")
+            // Reset state on error
+            await MainActor.run {
+                syncSuccess = false
+            }
         }
     }
 }

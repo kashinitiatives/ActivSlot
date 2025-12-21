@@ -227,6 +227,88 @@ class CalendarSyncService: ObservableObject {
         }
     }
 
+    // MARK: - Sync Movement Plan
+
+    /// Sync step slots and workout slot from a movement plan to external calendars
+    func syncMovementPlan(stepSlots: [StepSlot], workoutSlot: WorkoutSlot?, toCalendars calendarIDs: [String]) async throws {
+        guard !calendarIDs.isEmpty else { return }
+
+        await MainActor.run { isSyncing = true }
+        defer { Task { await MainActor.run { isSyncing = false } } }
+
+        var createdEvents = 0
+
+        for calendarID in calendarIDs {
+            // Sync walk slots
+            for slot in stepSlots {
+                do {
+                    try await createWalkEventInCalendar(slot: slot, calendarID: calendarID)
+                    createdEvents += 1
+                } catch {
+                    await MainActor.run {
+                        syncErrors.append("Failed to sync walk: \(error.localizedDescription)")
+                    }
+                }
+            }
+
+            // Sync workout slot
+            if let workout = workoutSlot {
+                do {
+                    try await createWorkoutEventInCalendar(slot: workout, calendarID: calendarID)
+                    createdEvents += 1
+                } catch {
+                    await MainActor.run {
+                        syncErrors.append("Failed to sync workout: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+
+        await MainActor.run { lastSyncDate = Date() }
+    }
+
+    /// Create a walk event in an external calendar
+    private func createWalkEventInCalendar(slot: StepSlot, calendarID: String) async throws {
+        let calendars = eventStore.calendars(for: .event)
+        guard let calendar = calendars.first(where: { $0.calendarIdentifier == calendarID }) else {
+            throw SyncError.calendarNotFound
+        }
+
+        let event = EKEvent(eventStore: eventStore)
+        event.calendar = calendar
+        event.title = slot.source ?? "Walk Break"
+        event.startDate = slot.startTime
+        event.endDate = slot.endTime
+        event.notes = "🚶 Activslot Walk\n\nTarget: \(slot.targetStepsFormatted)\nDuration: \(slot.duration) minutes\n\n---\nCreated by Activslot"
+
+        // Add reminder 10 minutes before
+        let alarm = EKAlarm(relativeOffset: TimeInterval(-10 * 60))
+        event.addAlarm(alarm)
+
+        try eventStore.save(event, span: .thisEvent)
+    }
+
+    /// Create a workout event in an external calendar
+    private func createWorkoutEventInCalendar(slot: WorkoutSlot, calendarID: String) async throws {
+        let calendars = eventStore.calendars(for: .event)
+        guard let calendar = calendars.first(where: { $0.calendarIdentifier == calendarID }) else {
+            throw SyncError.calendarNotFound
+        }
+
+        let event = EKEvent(eventStore: eventStore)
+        event.calendar = calendar
+        event.title = "\(slot.workoutType.rawValue) Workout"
+        event.startDate = slot.startTime
+        event.endDate = slot.endTime
+        event.notes = "💪 Activslot Workout\n\nType: \(slot.workoutType.rawValue)\nFocus: \(slot.workoutType.description)\nDuration: \(slot.duration) minutes\n\n---\nCreated by Activslot"
+
+        // Add reminder 15 minutes before
+        let alarm = EKAlarm(relativeOffset: TimeInterval(-15 * 60))
+        event.addAlarm(alarm)
+
+        try eventStore.save(event, span: .thisEvent)
+    }
+
     // MARK: - Clear Sync Errors
 
     func clearErrors() {
