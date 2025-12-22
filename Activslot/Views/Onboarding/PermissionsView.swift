@@ -126,6 +126,7 @@ struct PermissionsView: View {
                 onContinue()
             })
             .environmentObject(outlookManager)
+            .environmentObject(calendarManager)
         }
     }
 
@@ -442,74 +443,190 @@ struct OutlookSignInPrompt: View {
 struct OutlookSignInSheet: View {
     let onDone: () -> Void
     @EnvironmentObject var outlookManager: OutlookManager
+    @EnvironmentObject var calendarManager: CalendarManager
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var selectedOption: CalendarOption = .iosSync
+
+    enum CalendarOption {
+        case iosSync
+        case microsoftSignIn
+    }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                Spacer()
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Icon
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.system(size: 56))
+                        .foregroundColor(.blue)
+                        .padding(.top, 24)
 
-                // Icon
-                Image(systemName: "envelope.fill")
-                    .font(.system(size: 64))
-                    .foregroundColor(.blue)
+                    // Title
+                    Text("Connect Work Calendar")
+                        .font(.title2)
+                        .bold()
 
-                // Title
-                Text("Connect Outlook")
-                    .font(.title2)
-                    .bold()
+                    // Description
+                    Text("See your meetings to find the best times for walks and workouts.")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
 
-                // Description
-                Text("Sign in with your work account to see your Outlook meetings and find the best times for walks and gym sessions.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    // Show detected calendars from iOS
+                    if !calendarManager.availableCalendars.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Calendars Found on Device")
+                                .font(.headline)
 
-                Spacer()
+                            ForEach(calendarManager.availableCalendars) { calendar in
+                                HStack(spacing: 12) {
+                                    Circle()
+                                        .fill(calendar.color)
+                                        .frame(width: 12, height: 12)
 
-                // Sign In Button
-                Button {
-                    Task {
-                        do {
-                            try await outlookManager.signIn()
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(calendar.title)
+                                            .font(.subheadline)
+                                        Text(calendar.source)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    Image(systemName: calendarManager.selectedCalendarIDs.contains(calendar.id) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(calendarManager.selectedCalendarIDs.contains(calendar.id) ? .green : .gray)
+                                }
+                                .padding(.vertical, 4)
+                            }
+
+                            if calendarManager.hasOutlookCalendar {
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.green)
+                                    Text("Outlook calendar detected!")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                }
+                                .padding(.top, 4)
+                            }
+                        }
+                        .padding()
+                        .background(Color(.secondarySystemBackground))
+                        .cornerRadius(12)
+                        .padding(.horizontal, 24)
+                    }
+
+                    // Options
+                    VStack(spacing: 12) {
+                        // Option 1: Use iOS Calendar (Recommended)
+                        CalendarOptionCard(
+                            isSelected: selectedOption == .iosSync,
+                            icon: "iphone",
+                            title: "Use iPhone Calendar",
+                            subtitle: "Works with any Outlook account synced to your iPhone. No IT approval needed.",
+                            badge: "Recommended"
+                        ) {
+                            selectedOption = .iosSync
+                        }
+
+                        // Option 2: Microsoft Sign In (May require IT)
+                        CalendarOptionCard(
+                            isSelected: selectedOption == .microsoftSignIn,
+                            icon: "person.badge.key",
+                            title: "Sign in with Microsoft",
+                            subtitle: "Direct API access. May require IT admin approval for work accounts.",
+                            badge: nil
+                        ) {
+                            selectedOption = .microsoftSignIn
+                        }
+                    }
+                    .padding(.horizontal, 24)
+
+                    // Setup instructions for iOS sync
+                    if selectedOption == .iosSync && !calendarManager.hasOutlookCalendar {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("How to add Outlook to iPhone")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                SetupStepRow(number: 1, text: "Open iPhone Settings")
+                                SetupStepRow(number: 2, text: "Tap Calendar → Accounts")
+                                SetupStepRow(number: 3, text: "Add Account → Microsoft Exchange")
+                                SetupStepRow(number: 4, text: "Enter your work email")
+                            }
+
+                            Button {
+                                if let url = URL(string: "App-Prefs:root=ACCOUNTS_AND_PASSWORDS") {
+                                    UIApplication.shared.open(url)
+                                }
+                            } label: {
+                                Text("Open Settings")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                            }
+                            .padding(.top, 4)
+                        }
+                        .padding()
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(12)
+                        .padding(.horizontal, 24)
+                    }
+
+                    Spacer(minLength: 20)
+
+                    // CTA Button
+                    Button {
+                        if selectedOption == .iosSync {
+                            // Just use iOS calendars - already have permission
                             onDone()
-                        } catch OutlookError.userCancelled {
-                            // User cancelled
-                        } catch OutlookError.notConfigured {
-                            errorMessage = "Outlook integration is not configured yet. Please set up Azure App registration."
-                            showError = true
-                        } catch {
-                            errorMessage = error.localizedDescription
-                            showError = true
+                        } else {
+                            // Try Microsoft sign in
+                            Task {
+                                do {
+                                    try await outlookManager.signIn()
+                                    onDone()
+                                } catch OutlookError.userCancelled {
+                                    // User cancelled
+                                } catch OutlookError.notConfigured {
+                                    errorMessage = "Microsoft sign-in requires IT admin setup. We recommend using the iPhone Calendar option instead."
+                                    showError = true
+                                } catch {
+                                    errorMessage = "\(error.localizedDescription)\n\nTip: If your organization blocks this, use the iPhone Calendar option instead."
+                                    showError = true
+                                }
+                            }
                         }
-                    }
-                } label: {
-                    HStack {
-                        if outlookManager.isLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .padding(.trailing, 8)
+                    } label: {
+                        HStack {
+                            if outlookManager.isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .padding(.trailing, 8)
+                            }
+                            Text(selectedOption == .iosSync ? "Continue" : "Sign in with Microsoft")
+                                .font(.headline)
                         }
-                        Text("Sign in with Microsoft")
-                            .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color.blue)
+                        .cornerRadius(14)
                     }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.blue)
-                    .cornerRadius(14)
-                }
-                .disabled(outlookManager.isLoading)
-                .padding(.horizontal, 24)
+                    .disabled(outlookManager.isLoading)
+                    .padding(.horizontal, 24)
 
-                // Skip Button
-                Button("Skip for now") {
-                    onDone()
+                    // Skip Button
+                    Button("Skip for now") {
+                        onDone()
+                    }
+                    .foregroundColor(.secondary)
+                    .padding(.bottom, 40)
                 }
-                .foregroundColor(.secondary)
-                .padding(.bottom, 40)
             }
             .navigationTitle("Work Calendar")
             .navigationBarTitleDisplayMode(.inline)
@@ -521,11 +638,96 @@ struct OutlookSignInSheet: View {
                     .foregroundColor(.secondary)
                 }
             }
-            .alert("Sign In Error", isPresented: $showError) {
-                Button("OK") {}
+            .alert("Sign In Issue", isPresented: $showError) {
+                Button("Use iPhone Calendar") {
+                    selectedOption = .iosSync
+                }
+                Button("OK", role: .cancel) {}
             } message: {
                 Text(errorMessage)
             }
+        }
+    }
+}
+
+// MARK: - Calendar Option Card
+
+struct CalendarOptionCard: View {
+    let isSelected: Bool
+    let icon: String
+    let title: String
+    let subtitle: String
+    let badge: String?
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundColor(isSelected ? .blue : .secondary)
+                    .frame(width: 36)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(title)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+
+                        if let badge = badge {
+                            Text(badge)
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.green)
+                                .cornerRadius(4)
+                        }
+                    }
+
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer()
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundColor(isSelected ? .blue : .gray)
+            }
+            .padding()
+            .background(isSelected ? Color.blue.opacity(0.1) : Color(.secondarySystemBackground))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
+            )
+        }
+    }
+}
+
+// MARK: - Setup Step Row
+
+struct SetupStepRow: View {
+    let number: Int
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("\(number)")
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+                .frame(width: 20, height: 20)
+                .background(Color.blue)
+                .cornerRadius(10)
+
+            Text(text)
+                .font(.caption)
+                .foregroundColor(.primary)
         }
     }
 }
