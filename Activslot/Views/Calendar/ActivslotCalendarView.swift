@@ -29,14 +29,17 @@ struct ActivslotCalendarView: View {
     private var scheduledActivitiesAsPlanedForDate: [PlannedActivity] {
         scheduledActivityManager.activities(for: selectedDate).compactMap { scheduled -> PlannedActivity? in
             guard let timeRange = scheduled.getTimeRange(for: selectedDate) else { return nil }
-            return PlannedActivity(
+            var activity = PlannedActivity(
                 title: scheduled.activityType == .workout ? "Workout" : scheduled.title,
                 activityType: scheduled.activityType,
                 startTime: timeRange.start,
-                duration: scheduled.duration,
-                recurrence: scheduled.recurrence == .once ? nil : scheduled.recurrence,
-                isCompleted: scheduledActivityManager.isCompleted(activity: scheduled, for: selectedDate)
+                duration: scheduled.duration
             )
+            // Set completion status based on scheduled activity manager
+            if scheduledActivityManager.isCompleted(activity: scheduled, for: selectedDate) {
+                activity.isCompleted = true
+            }
+            return activity
         }
     }
 
@@ -83,6 +86,9 @@ struct ActivslotCalendarView: View {
                         onAddTap: { time in
                             selectedDate = time
                             showAddActivity = true
+                        },
+                        onActivityTimeChanged: { activity, newTime in
+                            updateActivityTime(activity, to: newTime)
                         }
                     )
                 case .week:
@@ -209,6 +215,27 @@ struct ActivslotCalendarView: View {
             }
         }
     }
+
+    private func updateActivityTime(_ activity: PlannedActivity, to newTime: Date) {
+        // Find and update the scheduled activity
+        if let scheduledActivity = scheduledActivityManager.activities(for: selectedDate)
+            .first(where: { scheduled in
+                // Match by activity type and approximate time
+                guard scheduled.activityType == activity.activityType,
+                      let timeRange = scheduled.getTimeRange(for: selectedDate) else {
+                    return false
+                }
+                return abs(timeRange.start.timeIntervalSince(activity.startTime)) < 60
+            }) {
+            // Update the activity time
+            scheduledActivityManager.updateActivityTime(scheduledActivity, to: newTime)
+            // Provide haptic feedback
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } else {
+            // Try to update in activity store
+            activityStore.updateActivityTime(activity, to: newTime)
+        }
+    }
 }
 
 // MARK: - Day Calendar View
@@ -219,14 +246,92 @@ struct DayCalendarView: View {
     let externalEvents: [CalendarEvent]
     let onActivityTap: (PlannedActivity) -> Void
     let onAddTap: (Date) -> Void
+    var onActivityTimeChanged: ((PlannedActivity, Date) -> Void)? = nil
 
     private let hourHeight: CGFloat = 60
     private let hours = Array(0..<24)
+    private let timeColumnWidth: CGFloat = 50
+    private let eventPadding: CGFloat = 4
+
+    // Separate all-day events from timed events
+    private var allDayEvents: [CalendarEvent] {
+        externalEvents.filter { $0.duration >= 1440 } // 24 hours or more
+    }
+
+    private var timedEvents: [CalendarEvent] {
+        externalEvents.filter { $0.duration < 1440 }
+    }
+
+    // Calculate horizontal positions for overlapping events
+    private var eventLayout: [String: (column: Int, totalColumns: Int)] {
+        var layout: [String: (column: Int, totalColumns: Int)] = [:]
+        let sortedEvents = timedEvents.sorted { $0.startDate < $1.startDate }
+
+        // Group overlapping events
+        var groups: [[CalendarEvent]] = []
+        for event in sortedEvents {
+            var addedToGroup = false
+            for i in groups.indices {
+                // Check if this event overlaps with any event in the group
+                let overlaps = groups[i].contains { existing in
+                    event.startDate < existing.endDate && event.endDate > existing.startDate
+                }
+                if overlaps {
+                    groups[i].append(event)
+                    addedToGroup = true
+                    break
+                }
+            }
+            if !addedToGroup {
+                groups.append([event])
+            }
+        }
+
+        // Assign columns within each group
+        for group in groups {
+            let sorted = group.sorted { $0.startDate < $1.startDate }
+            var columns: [[CalendarEvent]] = []
+
+            for event in sorted {
+                var placed = false
+                for colIndex in columns.indices {
+                    let canPlace = columns[colIndex].allSatisfy { existing in
+                        event.startDate >= existing.endDate || event.endDate <= existing.startDate
+                    }
+                    if canPlace {
+                        columns[colIndex].append(event)
+                        layout[event.id] = (column: colIndex, totalColumns: 0)
+                        placed = true
+                        break
+                    }
+                }
+                if !placed {
+                    columns.append([event])
+                    layout[event.id] = (column: columns.count - 1, totalColumns: 0)
+                }
+            }
+
+            // Update total columns for all events in group
+            for event in group {
+                if var entry = layout[event.id] {
+                    entry.totalColumns = columns.count
+                    layout[event.id] = entry
+                }
+            }
+        }
+
+        return layout
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             // Date Header with navigation
             DateNavigationHeader(selectedDate: $selectedDate)
+
+            // All-day events bar (if any)
+            if !allDayEvents.isEmpty {
+                AllDayEventsBar(events: allDayEvents)
+            }
 
             ScrollView {
                 ScrollViewReader { proxy in
@@ -239,20 +344,29 @@ struct DayCalendarView: View {
                             }
                         }
 
-                        // External events (work calendar)
-                        ForEach(externalEvents) { event in
-                            ExternalEventBlock(
-                                event: event,
-                                hourHeight: hourHeight
-                            )
+                        // External events (work calendar) - with layout to prevent overlap
+                        ForEach(timedEvents) { event in
+                            if let layoutInfo = eventLayout[event.id] {
+                                ExternalEventBlock(
+                                    event: event,
+                                    hourHeight: hourHeight,
+                                    column: layoutInfo.column,
+                                    totalColumns: layoutInfo.totalColumns,
+                                    timeColumnWidth: timeColumnWidth
+                                )
+                            }
                         }
 
-                        // Planned activities
+                        // Planned activities (with offset to not overlap with external events)
                         ForEach(activities) { activity in
                             ActivityBlock(
                                 activity: activity,
                                 hourHeight: hourHeight,
-                                onTap: { onActivityTap(activity) }
+                                offset: calculateActivityOffset(for: activity),
+                                onTap: { onActivityTap(activity) },
+                                onTimeChanged: { newTime in
+                                    onActivityTimeChanged?(activity, newTime)
+                                }
                             )
                         }
 
@@ -270,6 +384,96 @@ struct DayCalendarView: View {
                     }
                 }
             }
+        }
+    }
+
+    // Calculate offset for activities to avoid overlapping with external events
+    private func calculateActivityOffset(for activity: PlannedActivity) -> CGFloat {
+        let overlappingEvents = timedEvents.filter { event in
+            activity.startTime < event.endDate && activity.endTime > event.startDate
+        }
+        if overlappingEvents.isEmpty { return 0 }
+
+        // Find max columns used by overlapping events
+        var maxColumns = 1
+        for event in overlappingEvents {
+            if let layout = eventLayout[event.id] {
+                maxColumns = max(maxColumns, layout.totalColumns)
+            }
+        }
+        // Activity goes in the last column
+        return CGFloat(maxColumns) * 0.15 // 15% offset per column
+    }
+}
+
+// MARK: - All Day Events Bar
+
+struct AllDayEventsBar: View {
+    let events: [CalendarEvent]
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.spring(response: 0.3)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "calendar")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+
+                    Text("All Day")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+
+                    Text("(\(events.count))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    if !isExpanded {
+                        Text(events.map { $0.title }.prefix(2).joined(separator: ", "))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            }
+            .background(Color.blue.opacity(0.1))
+
+            if isExpanded {
+                VStack(spacing: 4) {
+                    ForEach(events) { event in
+                        HStack {
+                            Circle()
+                                .fill(Color.blue)
+                                .frame(width: 6, height: 6)
+
+                            Text(event.title)
+                                .font(.caption)
+                                .lineLimit(1)
+
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 4)
+                    }
+                }
+                .padding(.vertical, 4)
+                .background(Color.blue.opacity(0.05))
+            }
+
+            Divider()
         }
     }
 }
@@ -342,54 +546,143 @@ struct HourRow: View {
     }
 }
 
-// MARK: - Activity Block
+// MARK: - Activity Block (Draggable)
 
 struct ActivityBlock: View {
     let activity: PlannedActivity
     let hourHeight: CGFloat
+    var offset: CGFloat = 0
     let onTap: () -> Void
+    var onTimeChanged: ((Date) -> Void)? = nil
+
+    @State private var isDragging = false
+    @State private var dragOffset: CGFloat = 0
+    @State private var currentDragHour: Int? = nil
+    @GestureState private var isLongPressing = false
 
     var body: some View {
-        let yOffset = calculateYOffset()
+        let baseYOffset = calculateYOffset()
+        let yOffset = baseYOffset + dragOffset
         let height = calculateHeight()
 
-        Button(action: onTap) {
-            HStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(activity.color)
-                    .frame(width: 4)
+        GeometryReader { geometry in
+            let availableWidth = geometry.size.width - 82 // 66 leading + 16 trailing
+            let activityWidth = availableWidth * (1 - offset)
+            let leadingOffset = 66 + (availableWidth * offset)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(activity.title)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
+            ZStack {
+                // Activity content
+                HStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(activity.color)
+                        .frame(width: 4)
 
-                    Text(activity.timeRangeFormatted)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(activity.title)
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+
+                        if height > 35 {
+                            if isDragging, let hour = currentDragHour {
+                                Text(formatHour(hour))
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                                    .fontWeight(.medium)
+                            } else {
+                                Text(activity.timeRangeFormatted)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+
+                    if height > 30 {
+                        Image(systemName: isDragging ? "arrow.up.and.down" : activity.icon)
+                            .font(.caption2)
+                            .foregroundColor(isDragging ? .blue : activity.color)
+                    }
                 }
-
-                Spacer()
-
-                Image(systemName: activity.icon)
-                    .font(.caption)
-                    .foregroundColor(activity.color)
+                .padding(6)
+                .frame(width: activityWidth, alignment: .leading)
+                .frame(height: max(height - 4, 26))
+                .background(isDragging ? activity.color.opacity(0.35) : activity.color.opacity(0.2))
+                .cornerRadius(6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(isDragging ? Color.blue : activity.color, lineWidth: isDragging ? 2 : 1)
+                )
+                .shadow(color: isDragging ? Color.black.opacity(0.2) : .clear, radius: 4, y: 2)
+                .scaleEffect(isDragging ? 1.02 : 1.0)
             }
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: max(height - 4, 30))
-            .background(activity.color.opacity(0.15))
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(activity.color.opacity(0.3), lineWidth: 1)
+            .position(x: leadingOffset + activityWidth / 2, y: yOffset + height / 2)
+            .gesture(
+                LongPressGesture(minimumDuration: 0.3)
+                    .updating($isLongPressing) { currentState, gestureState, transaction in
+                        gestureState = currentState
+                    }
+                    .sequenced(before: DragGesture())
+                    .onChanged { value in
+                        switch value {
+                        case .first(true):
+                            // Long press started
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isDragging = true
+                            }
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        case .second(true, let drag):
+                            // Dragging
+                            if let drag = drag {
+                                dragOffset = drag.translation.height
+                                // Calculate new hour based on drag position
+                                let newY = baseYOffset + drag.translation.height
+                                let newHour = Int(newY / hourHeight)
+                                currentDragHour = max(0, min(23, newHour))
+                            }
+                        default:
+                            break
+                        }
+                    }
+                    .onEnded { value in
+                        if case .second(true, let drag) = value, let drag = drag {
+                            // Snap to nearest 15-minute interval
+                            let newY = baseYOffset + drag.translation.height
+                            let totalMinutes = Int((newY / hourHeight) * 60)
+                            let snappedMinutes = (totalMinutes / 15) * 15
+                            let newHour = snappedMinutes / 60
+                            let newMinute = snappedMinutes % 60
+
+                            // Create new time
+                            var components = Calendar.current.dateComponents([.year, .month, .day], from: activity.startTime)
+                            components.hour = max(0, min(23, newHour))
+                            components.minute = max(0, min(59, newMinute))
+
+                            if let newTime = Calendar.current.date(from: components) {
+                                onTimeChanged?(newTime)
+                            }
+                        }
+
+                        withAnimation(.spring(response: 0.3)) {
+                            isDragging = false
+                            dragOffset = 0
+                            currentDragHour = nil
+                        }
+                    }
+            )
+            .simultaneousGesture(
+                TapGesture()
+                    .onEnded {
+                        if !isDragging {
+                            onTap()
+                        }
+                    }
             )
         }
-        .buttonStyle(.plain)
-        .padding(.leading, 66)
-        .padding(.trailing, 16)
-        .offset(y: yOffset)
+        .frame(height: 24 * hourHeight) // Full day height
+        .zIndex(isDragging ? 100 : 0)
     }
 
     private func calculateYOffset() -> CGFloat {
@@ -402,6 +695,18 @@ struct ActivityBlock: View {
     private func calculateHeight() -> CGFloat {
         CGFloat(activity.duration) / 60 * hourHeight
     }
+
+    private func formatHour(_ hour: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        var components = DateComponents()
+        components.hour = hour
+        components.minute = 0
+        if let date = Calendar.current.date(from: components) {
+            return formatter.string(from: date)
+        }
+        return "\(hour):00"
+    }
 }
 
 // MARK: - External Event Block
@@ -409,41 +714,57 @@ struct ActivityBlock: View {
 struct ExternalEventBlock: View {
     let event: CalendarEvent
     let hourHeight: CGFloat
+    var column: Int = 0
+    var totalColumns: Int = 1
+    var timeColumnWidth: CGFloat = 50
 
     var body: some View {
         let yOffset = calculateYOffset()
         let height = calculateHeight()
 
-        HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color.blue)
-                .frame(width: 4)
+        GeometryReader { geometry in
+            let totalWidth = geometry.size.width - timeColumnWidth - 32 // padding
+            let columnWidth = totalColumns > 0 ? totalWidth / CGFloat(totalColumns) : totalWidth
+            let xOffset = timeColumnWidth + 16 + (CGFloat(column) * columnWidth)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(event.title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-                    .foregroundColor(.primary)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.blue)
+                        .frame(width: 3)
 
-                if event.isWalkable {
-                    Label("Walkable", systemImage: "figure.walk")
-                        .font(.caption2)
-                        .foregroundColor(.green)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(event.title)
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .lineLimit(height > 40 ? 2 : 1)
+                            .foregroundColor(.primary)
+
+                        if height > 35 && event.isWalkable {
+                            HStack(spacing: 2) {
+                                Image(systemName: "figure.walk")
+                                    .font(.system(size: 8))
+                                Text("Walkable")
+                                    .font(.system(size: 9))
+                            }
+                            .foregroundColor(.green)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .padding(4)
             }
-
-            Spacer()
+            .frame(width: columnWidth - 4, alignment: .leading)
+            .frame(height: max(height - 2, 24))
+            .background(Color.blue.opacity(0.15))
+            .cornerRadius(4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(Color.blue.opacity(0.4), lineWidth: 0.5)
+            )
+            .position(x: xOffset + (columnWidth - 4) / 2, y: yOffset + height / 2)
         }
-        .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: max(height - 4, 30))
-        .background(Color.blue.opacity(0.1))
-        .cornerRadius(8)
-        .padding(.leading, 66)
-        .padding(.trailing, 16)
-        .offset(y: yOffset)
-        .opacity(0.7)
+        .frame(height: 24 * hourHeight) // Full day height
     }
 
     private func calculateYOffset() -> CGFloat {

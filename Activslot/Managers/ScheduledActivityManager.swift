@@ -283,6 +283,18 @@ class ScheduledActivityManager: ObservableObject {
         saveScheduledActivities()
     }
 
+    /// Update the time of a scheduled activity (used for drag-to-move in calendar)
+    func updateActivityTime(_ activity: ScheduledActivity, to newTime: Date) {
+        if let index = scheduledActivities.firstIndex(where: { $0.id == activity.id }) {
+            var updatedActivity = scheduledActivities[index]
+            let calendar = Calendar.current
+            updatedActivity.startHour = calendar.component(.hour, from: newTime)
+            updatedActivity.startMinute = calendar.component(.minute, from: newTime)
+            scheduledActivities[index] = updatedActivity
+            saveScheduledActivities()
+        }
+    }
+
     // MARK: - Query Methods
 
     /// Get all scheduled activities for a specific date

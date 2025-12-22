@@ -263,6 +263,19 @@ class ActivityStore: ObservableObject {
         saveActivities()
     }
 
+    /// Update the time of an activity (used for drag-to-move in calendar)
+    func updateActivityTime(_ activity: PlannedActivity, to newTime: Date) {
+        if let index = activities.firstIndex(where: { $0.id == activity.id }) {
+            var updated = activities[index]
+            // Calculate new end time based on duration
+            let duration = updated.duration
+            updated.startTime = newTime
+            updated.updatedAt = Date()
+            activities[index] = updated
+            saveActivities()
+        }
+    }
+
     func deleteActivity(at offsets: IndexSet, from dayActivities: [PlannedActivity]) {
         for index in offsets {
             let activity = dayActivities[index]

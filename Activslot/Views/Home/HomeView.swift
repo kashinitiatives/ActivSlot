@@ -14,8 +14,12 @@ struct HomeView: View {
     @State private var showScheduleWalk = false
     @State private var showScheduleWorkout = false
     @State private var showScheduledActivities = false
+    @State private var showCustomTimeSheet = false
+    @State private var customTimeActivityType: ActivityType = .walk
     @State private var conflictToResolve: ScheduleConflict?
     @State private var selectedDay: SelectedDay = .today
+    @State private var slotToSchedule: StepSlot?
+    @State private var workoutToSchedule: WorkoutSlot?
 
     enum SelectedDay {
         case today, tomorrow
@@ -74,16 +78,29 @@ struct HomeView: View {
                         let currentPlan = selectedDay == .today ? planManager.todayPlan : planManager.tomorrowPlan
                         // Get the primary suggestion (first slot) and walkable meetings separately
                         let walkableMeetings = currentPlan?.stepSlots.filter { $0.slotType == .walkableMeeting } ?? []
-                        let primaryWalkSlot = currentPlan?.stepSlots.first(where: { $0.slotType == .freeTime }) ?? currentPlan?.stepSlots.first
+                        let freeTimeSlots = currentPlan?.stepSlots.filter { $0.slotType == .freeTime } ?? []
+                        let primaryWalkSlot = freeTimeSlots.first ?? currentPlan?.stepSlots.first
 
                         SuggestedSlotsSection(
                             suggestedWalk: primaryWalkSlot,
                             suggestedWorkout: currentPlan?.workoutSlot,
                             walkableMeetings: walkableMeetings,
+                            allWalkSlots: freeTimeSlots,
                             hasWorkoutGoal: userPreferences.hasWorkoutGoal,
                             isToday: selectedDay == .today,
-                            onScheduleWalk: { showScheduleWalk = true },
-                            onScheduleWorkout: { showScheduleWorkout = true }
+                            onScheduleSlot: { walkSlot, workoutSlot, activityType in
+                                if activityType == .walk, let slot = walkSlot {
+                                    slotToSchedule = slot
+                                    showScheduleWalk = true
+                                } else if activityType == .workout, let slot = workoutSlot {
+                                    workoutToSchedule = slot
+                                    showScheduleWorkout = true
+                                }
+                            },
+                            onCustomTime: { activityType in
+                                customTimeActivityType = activityType
+                                showCustomTimeSheet = true
+                            }
                         )
                     }
 
@@ -139,12 +156,14 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showScheduleWalk) {
                 let currentPlan = selectedDay == .today ? planManager.todayPlan : planManager.tomorrowPlan
-                if let walkSlot = currentPlan?.stepSlots.first {
+                let walkSlot = slotToSchedule ?? currentPlan?.stepSlots.first
+                if let slot = walkSlot {
                     ScheduleActivitySheet(
                         activityType: .walk,
-                        suggestedTime: walkSlot.startTime,
-                        suggestedDuration: walkSlot.duration,
+                        suggestedTime: slot.startTime,
+                        suggestedDuration: slot.duration,
                         onScheduled: {
+                            slotToSchedule = nil
                             Task { await planManager.generatePlans() }
                         }
                     )
@@ -152,17 +171,28 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showScheduleWorkout) {
                 let currentPlan = selectedDay == .today ? planManager.todayPlan : planManager.tomorrowPlan
-                if let workoutSlot = currentPlan?.workoutSlot {
+                let workout = workoutToSchedule ?? currentPlan?.workoutSlot
+                if let slot = workout {
                     ScheduleActivitySheet(
                         activityType: .workout,
-                        suggestedTime: workoutSlot.startTime,
-                        suggestedDuration: workoutSlot.duration,
-                        workoutType: workoutSlot.workoutType,
+                        suggestedTime: slot.startTime,
+                        suggestedDuration: slot.duration,
+                        workoutType: slot.workoutType,
                         onScheduled: {
+                            workoutToSchedule = nil
                             Task { await planManager.generatePlans() }
                         }
                     )
                 }
+            }
+            .sheet(isPresented: $showCustomTimeSheet) {
+                CustomTimeSlotSheet(
+                    activityType: customTimeActivityType,
+                    date: selectedDay == .today ? Date() : Calendar.current.date(byAdding: .day, value: 1, to: Date())!,
+                    onScheduled: {
+                        Task { await planManager.generatePlans() }
+                    }
+                )
             }
             .sheet(isPresented: $showScheduledActivities) {
                 ScheduledActivitiesListSheet()
@@ -800,54 +830,280 @@ struct MovementPlanSection: View {
     }
 }
 
-// MARK: - Conflicts Alert Section
+// MARK: - Conflicts Alert Section (Collapsible with Swipe to Dismiss)
 
 struct ConflictsAlertSection: View {
     let conflicts: [ScheduleConflict]
     var onResolve: (ScheduleConflict) -> Void
+    @State private var isExpanded = false
+    @State private var dismissedConflictIds: Set<UUID> = []
+
+    private var visibleConflicts: [ScheduleConflict] {
+        conflicts.filter { !dismissedConflictIds.contains($0.id) }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.orange)
-                Text("Schedule Conflicts")
-                    .font(.headline)
-            }
+        if !visibleConflicts.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                // Header - tap to expand/collapse
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
 
-            ForEach(conflicts) { conflict in
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(conflict.scheduledActivity.title)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+                        Text("Schedule Conflicts")
+                            .font(.headline)
+                            .foregroundColor(.primary)
 
-                        Text(conflict.description)
+                        Text("(\(visibleConflicts.count))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        Spacer()
+
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-
-                    Spacer()
-
-                    Button("Resolve") {
-                        onResolve(conflict)
-                    }
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.orange)
-                    .cornerRadius(8)
                 }
-                .padding(12)
-                .background(Color.orange.opacity(0.1))
-                .cornerRadius(10)
+
+                // Collapsed summary
+                if !isExpanded {
+                    HStack {
+                        Text(visibleConflicts.map { $0.scheduledActivity.title }.joined(separator: ", "))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+
+                        Spacer()
+
+                        Text("Tap to view")
+                            .font(.caption2)
+                            .foregroundColor(.blue)
+                    }
+                }
+
+                // Expanded list with swipe to dismiss
+                if isExpanded {
+                    ForEach(visibleConflicts) { conflict in
+                        ConflictRow(
+                            conflict: conflict,
+                            onResolve: { onResolve(conflict) },
+                            onDismiss: {
+                                withAnimation {
+                                    _ = dismissedConflictIds.insert(conflict.id)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+            .padding(16)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(16)
+        }
+    }
+}
+
+// MARK: - Conflict Row with Swipe to Dismiss
+
+struct ConflictRow: View {
+    let conflict: ScheduleConflict
+    var onResolve: () -> Void
+    var onDismiss: () -> Void
+    @State private var offset: CGFloat = 0
+    @State private var isSwiping = false
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            // Dismiss background
+            HStack {
+                Spacer()
+                Text("Dismiss")
+                    .font(.caption)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.gray)
+            .cornerRadius(10)
+
+            // Main content
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(conflict.scheduledActivity.title)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    Text(conflict.description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                Button("Resolve") {
+                    onResolve()
+                }
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.orange)
+                .cornerRadius(8)
+            }
+            .padding(12)
+            .background(Color.orange.opacity(0.1))
+            .cornerRadius(10)
+            .offset(x: offset)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if value.translation.width < 0 {
+                            offset = value.translation.width
+                            isSwiping = true
+                        }
+                    }
+                    .onEnded { value in
+                        if value.translation.width < -100 {
+                            withAnimation {
+                                offset = -500
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                onDismiss()
+                            }
+                        } else {
+                            withAnimation {
+                                offset = 0
+                            }
+                        }
+                        isSwiping = false
+                    }
+            )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+// MARK: - Custom Time Slot Sheet
+
+struct CustomTimeSlotSheet: View {
+    let activityType: ActivityType
+    let date: Date
+    var onScheduled: () -> Void
+
+    @Environment(\.dismiss) var dismiss
+    @StateObject private var scheduledActivityManager = ScheduledActivityManager.shared
+    @EnvironmentObject var userPreferences: UserPreferences
+
+    @State private var selectedTime = Date()
+    @State private var duration: Int = 30
+
+    private var durationOptions: [Int] {
+        if activityType == .walk {
+            return [15, 20, 30, 45, 60]
+        } else {
+            return [30, 45, 60, 90, 120]
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    DatePicker(
+                        "Start Time",
+                        selection: $selectedTime,
+                        displayedComponents: [.hourAndMinute]
+                    )
+
+                    Picker("Duration", selection: $duration) {
+                        ForEach(durationOptions, id: \.self) { mins in
+                            Text("\(mins) min").tag(mins)
+                        }
+                    }
+                } header: {
+                    HStack {
+                        Image(systemName: activityType == .walk ? "figure.walk" : "figure.strengthtraining.traditional")
+                            .foregroundColor(activityType == .walk ? .green : .orange)
+                        Text(activityType == .walk ? "Walk" : "Workout")
+                    }
+                }
+
+                if activityType == .walk {
+                    Section {
+                        HStack {
+                            Text("Estimated Steps")
+                            Spacer()
+                            Text("~\((duration * 100).formatted())")
+                                .fontWeight(.medium)
+                                .foregroundColor(.green)
+                        }
+                    }
+                }
+
+                Section {
+                    Button {
+                        scheduleActivity()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Text("Schedule")
+                                .fontWeight(.semibold)
+                            Spacer()
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Custom \(activityType == .walk ? "Walk" : "Workout")")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear {
+                // Set default time based on date
+                var components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+                let hour = Calendar.current.component(.hour, from: Date())
+                components.hour = max(hour + 1, 8) // At least 1 hour from now or 8 AM
+                components.minute = 0
+                if let defaultTime = Calendar.current.date(from: components) {
+                    selectedTime = defaultTime
+                }
+                duration = activityType == .walk ? 30 : 60
             }
         }
-        .padding(16)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
+    }
+
+    private func scheduleActivity() {
+        // Combine date and time
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        let timeComponents = Calendar.current.dateComponents([.hour, .minute], from: selectedTime)
+        components.hour = timeComponents.hour
+        components.minute = timeComponents.minute
+
+        guard let startTime = Calendar.current.date(from: components) else { return }
+
+        let activity = ScheduledActivity(
+            activityType: activityType,
+            workoutType: activityType == .workout ? .fullBody : nil,
+            title: activityType == .walk ? "Walk" : "Workout",
+            startTime: startTime,
+            duration: duration,
+            recurrence: .once
+        )
+
+        scheduledActivityManager.addScheduledActivity(activity)
+        onScheduled()
+        dismiss()
     }
 }
 
@@ -1011,12 +1267,17 @@ struct SuggestedSlotsSection: View {
     let suggestedWalk: StepSlot?
     let suggestedWorkout: WorkoutSlot?
     let walkableMeetings: [StepSlot]
+    let allWalkSlots: [StepSlot]
     let hasWorkoutGoal: Bool
     var isToday: Bool = true
-    var onScheduleWalk: () -> Void
-    var onScheduleWorkout: () -> Void
+    var onScheduleSlot: (StepSlot?, WorkoutSlot?, ActivityType) -> Void
+    var onCustomTime: (ActivityType) -> Void
     @StateObject private var scheduledActivityManager = ScheduledActivityManager.shared
     @EnvironmentObject var userPreferences: UserPreferences
+
+    @State private var selectedWalkSlots: Set<UUID> = []
+    @State private var selectedWorkoutSlot: WorkoutSlot?
+    @State private var showConflictsExpanded = false
 
     // Check if we have historical patterns for this weekday
     private var hasWalkHistory: Bool {
@@ -1027,20 +1288,6 @@ struct SuggestedSlotsSection: View {
     private var hasWorkoutHistory: Bool {
         let patterns = scheduledActivityManager.getTimeSuggestions(for: .workout, on: Date())
         return !patterns.isEmpty
-    }
-
-    // Check if walk and workout preferences are the same time
-    private var samePreferenceTime: Bool {
-        guard hasWorkoutGoal else { return false }
-        // Compare preference categories (morning, afternoon, evening)
-        switch (userPreferences.preferredWalkTime, userPreferences.preferredGymTime) {
-        case (.morning, .morning), (.afternoon, .afternoon), (.evening, .evening):
-            return true
-        case (.noPreference, _), (_, .noPreference):
-            return true // No preference means any time works
-        default:
-            return false
-        }
     }
 
     private var walkPreferenceLabel: String {
@@ -1061,112 +1308,377 @@ struct SuggestedSlotsSection: View {
         }
     }
 
+    // Calculate total estimated steps from selected walk slots
+    private var totalSelectedSteps: Int {
+        allWalkSlots
+            .filter { selectedWalkSlots.contains($0.id) }
+            .reduce(0) { $0 + $1.targetSteps }
+    }
+
+    // Check if any selections have been made
+    private var hasSelections: Bool {
+        !selectedWalkSlots.isEmpty || selectedWorkoutSlot != nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(isToday ? "Suggested for Today" : "Suggested for Tomorrow")
-                .font(.headline)
+            // Header with selection summary
+            HStack {
+                Text(isToday ? "Suggested Slots" : "Tomorrow's Slots")
+                    .font(.headline)
 
-            // If same preference time AND both walk and workout needed, show combined slot picker
-            if samePreferenceTime && suggestedWalk != nil {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("\(walkPreferenceLabel) Slots")
+                Spacer()
+
+                if hasSelections {
+                    Text("\(totalSelectedSteps.formatted()) steps")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(8)
+                }
+            }
+
+            // Walk Slots Section
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "figure.walk")
+                        .foregroundColor(.green)
+                    Text("Walk Slots")
                         .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    Spacer()
+
+                    // Custom time button
+                    Button {
+                        onCustomTime(.walk)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus.circle")
+                            Text("Custom")
+                        }
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    }
+                }
+
+                // Show all available walk slots with selection
+                ForEach(allWalkSlots) { slot in
+                    SelectableSlotCard(
+                        slot: slot,
+                        isSelected: selectedWalkSlots.contains(slot.id),
+                        isBestTime: slot.id == suggestedWalk?.id,
+                        hasHistory: hasWalkHistory && slot.id == suggestedWalk?.id,
+                        activityType: .walk,
+                        onToggle: {
+                            if selectedWalkSlots.contains(slot.id) {
+                                selectedWalkSlots.remove(slot.id)
+                            } else {
+                                selectedWalkSlots.insert(slot.id)
+                            }
+                        },
+                        onSchedule: {
+                            onScheduleSlot(slot, nil, .walk)
+                        }
+                    )
+                }
+
+                // Walkable meetings as additional walk options
+                if !walkableMeetings.isEmpty {
+                    Text("During Meetings")
+                        .font(.caption)
                         .foregroundColor(.secondary)
+                        .padding(.top, 4)
 
-                    // Show the slot with both options
-                    if let walk = suggestedWalk {
-                        AvailableSlotCard(
-                            time: walk.timeRangeFormatted,
-                            duration: walk.duration,
-                            steps: walk.targetSteps,
-                            source: walk.source,
-                            hasWalkHistory: hasWalkHistory,
-                            hasWorkoutHistory: hasWorkoutHistory,
-                            hasWorkoutGoal: hasWorkoutGoal,
-                            onAddWalk: onScheduleWalk,
-                            onAddWorkout: hasWorkoutGoal ? onScheduleWorkout : nil
-                        )
-                    }
-
-                    // If there's a separate workout slot at a different time
-                    if let workout = suggestedWorkout,
-                       let walk = suggestedWalk,
-                       workout.startTime != walk.startTime {
-                        AvailableSlotCard(
-                            time: workout.timeRangeFormatted,
-                            duration: workout.duration,
-                            steps: nil,
-                            source: nil,
-                            hasWalkHistory: false,
-                            hasWorkoutHistory: hasWorkoutHistory,
-                            hasWorkoutGoal: true,
-                            onAddWalk: nil,
-                            onAddWorkout: onScheduleWorkout
-                        )
-                    }
-                }
-            } else {
-                // Different preference times - show separate sections
-
-                // Walk slot (morning/afternoon/evening based on preference)
-                if let walk = suggestedWalk {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("\(walkPreferenceLabel) - Walk")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-
-                        SuggestionCard(
-                            icon: walk.slotType == .walkableMeeting ? "phone.fill" : "figure.walk",
-                            color: .green,
-                            title: walk.source ?? "Walk Break",
-                            time: walk.timeRangeFormatted,
-                            subtitle: walk.targetStepsFormatted,
-                            badgeText: hasWalkHistory ? "Your Best Time" : "Best Time",
-                            reasonText: hasWalkHistory ? "Based on your past \(Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: Date()) - 1])s" : nil,
-                            onSchedule: onScheduleWalk
-                        )
-                    }
-                }
-
-                // Workout slot (at different time than walk)
-                if hasWorkoutGoal, let workout = suggestedWorkout {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("\(workoutPreferenceLabel) - Workout")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-
-                        SuggestionCard(
-                            icon: "figure.strengthtraining.traditional",
-                            color: .orange,
-                            title: "Workout",
-                            time: workout.timeRangeFormatted,
-                            subtitle: "\(workout.duration) minutes",
-                            badgeText: hasWorkoutHistory ? "Your Best Time" : (workout.isRecommended ? "Recommended" : nil),
-                            reasonText: hasWorkoutHistory ? "Based on your past \(Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: Date()) - 1])s" : nil,
-                            onSchedule: onScheduleWorkout
+                    ForEach(walkableMeetings.prefix(3)) { meeting in
+                        SelectableSlotCard(
+                            slot: meeting,
+                            isSelected: selectedWalkSlots.contains(meeting.id),
+                            isBestTime: false,
+                            hasHistory: false,
+                            activityType: .walk,
+                            onToggle: {
+                                if selectedWalkSlots.contains(meeting.id) {
+                                    selectedWalkSlots.remove(meeting.id)
+                                } else {
+                                    selectedWalkSlots.insert(meeting.id)
+                                }
+                            },
+                            onSchedule: {
+                                onScheduleSlot(meeting, nil, .walk)
+                            }
                         )
                     }
                 }
             }
 
-            // Walkable Meetings (low-importance meetings)
-            if !walkableMeetings.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Low-Priority Meetings")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+            // Workout Slots Section (only if user has workout goal)
+            if hasWorkoutGoal {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "figure.strengthtraining.traditional")
+                            .foregroundColor(.orange)
+                        Text("Workout Slot")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
 
-                    Text("Walk during these meetings (~\(walkableMeetings.reduce(0) { $0 + $1.targetSteps }) steps)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        Spacer()
 
-                    ForEach(walkableMeetings.prefix(3)) { meeting in
-                        WalkableMeetingRow(meeting: meeting)
+                        // Custom time button
+                        Button {
+                            onCustomTime(.workout)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "plus.circle")
+                                Text("Custom")
+                            }
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                        }
+                    }
+
+                    if let workout = suggestedWorkout {
+                        SelectableWorkoutCard(
+                            slot: workout,
+                            isSelected: selectedWorkoutSlot?.id == workout.id,
+                            isBestTime: true,
+                            hasHistory: hasWorkoutHistory,
+                            onToggle: {
+                                if selectedWorkoutSlot?.id == workout.id {
+                                    selectedWorkoutSlot = nil
+                                } else {
+                                    selectedWorkoutSlot = workout
+                                }
+                            },
+                            onSchedule: {
+                                onScheduleSlot(nil, workout, .workout)
+                            }
+                        )
+                    } else {
+                        // No workout slot available - show prompt to add custom
+                        HStack {
+                            Image(systemName: "info.circle")
+                                .foregroundColor(.secondary)
+                            Text("No available slot. Tap Custom to set your own time.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(12)
+                        .background(Color(.tertiarySystemBackground))
+                        .cornerRadius(10)
                     }
                 }
                 .padding(.top, 8)
             }
+
+            // Schedule selected button (if multiple selections)
+            if hasSelections {
+                Button {
+                    // Schedule all selected slots
+                    for slotId in selectedWalkSlots {
+                        if let slot = allWalkSlots.first(where: { $0.id == slotId }) ?? walkableMeetings.first(where: { $0.id == slotId }) {
+                            onScheduleSlot(slot, nil, .walk)
+                        }
+                    }
+                    if let workout = selectedWorkoutSlot {
+                        onScheduleSlot(nil, workout, .workout)
+                    }
+                    // Clear selections after scheduling
+                    selectedWalkSlots.removeAll()
+                    selectedWorkoutSlot = nil
+                } label: {
+                    HStack {
+                        Image(systemName: "calendar.badge.plus")
+                        Text("Schedule Selected (\(selectedWalkSlots.count + (selectedWorkoutSlot != nil ? 1 : 0)))")
+                        Spacer()
+                        Text("\(totalSelectedSteps.formatted()) steps")
+                            .fontWeight(.medium)
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(.white)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 16)
+                    .background(Color.blue)
+                    .cornerRadius(12)
+                }
+                .padding(.top, 8)
+            }
         }
+    }
+}
+
+// MARK: - Selectable Slot Card
+
+struct SelectableSlotCard: View {
+    let slot: StepSlot
+    let isSelected: Bool
+    let isBestTime: Bool
+    let hasHistory: Bool
+    let activityType: ActivityType
+    var onToggle: () -> Void
+    var onSchedule: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Selection checkbox
+            Button {
+                onToggle()
+            } label: {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundColor(isSelected ? .green : .gray)
+            }
+
+            // Slot icon
+            Image(systemName: slot.slotType == .walkableMeeting ? "phone.fill" : "figure.walk")
+                .font(.caption)
+                .foregroundColor(.green)
+                .frame(width: 28, height: 28)
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(6)
+
+            // Slot info
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(slot.source ?? "Walk")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+
+                    if isBestTime {
+                        Text(hasHistory ? "Your Best" : "Best")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.green)
+                            .cornerRadius(4)
+                    }
+                }
+
+                Text(slot.timeRangeFormatted)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            // Steps estimate
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("~\(slot.targetSteps)")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.green)
+                Text("steps")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
+            // Quick schedule button
+            Button {
+                onSchedule()
+            } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.title3)
+                    .foregroundColor(.blue)
+            }
+        }
+        .padding(10)
+        .background(isSelected ? Color.green.opacity(0.08) : Color(.secondarySystemBackground))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isSelected ? Color.green.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Selectable Workout Card
+
+struct SelectableWorkoutCard: View {
+    let slot: WorkoutSlot
+    let isSelected: Bool
+    let isBestTime: Bool
+    let hasHistory: Bool
+    var onToggle: () -> Void
+    var onSchedule: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Selection checkbox
+            Button {
+                onToggle()
+            } label: {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundColor(isSelected ? .orange : .gray)
+            }
+
+            // Workout icon
+            Image(systemName: "figure.strengthtraining.traditional")
+                .font(.caption)
+                .foregroundColor(.orange)
+                .frame(width: 28, height: 28)
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(6)
+
+            // Slot info
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text("Workout")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    if isBestTime {
+                        Text(hasHistory ? "Your Best" : "Best")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.orange)
+                            .cornerRadius(4)
+                    }
+                }
+
+                Text(slot.timeRangeFormatted)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            // Duration
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(slot.duration)")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.orange)
+                Text("min")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
+            // Quick schedule button
+            Button {
+                onSchedule()
+            } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.title3)
+                    .foregroundColor(.blue)
+            }
+        }
+        .padding(10)
+        .background(isSelected ? Color.orange.opacity(0.08) : Color(.secondarySystemBackground))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isSelected ? Color.orange.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
     }
 }
 
