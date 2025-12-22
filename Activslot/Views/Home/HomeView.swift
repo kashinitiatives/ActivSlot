@@ -1016,6 +1016,7 @@ struct SuggestedSlotsSection: View {
     var onScheduleWalk: () -> Void
     var onScheduleWorkout: () -> Void
     @StateObject private var scheduledActivityManager = ScheduledActivityManager.shared
+    @EnvironmentObject var userPreferences: UserPreferences
 
     // Check if we have historical patterns for this weekday
     private var hasWalkHistory: Bool {
@@ -1028,37 +1029,124 @@ struct SuggestedSlotsSection: View {
         return !patterns.isEmpty
     }
 
+    // Check if walk and workout preferences are the same time
+    private var samePreferenceTime: Bool {
+        guard hasWorkoutGoal else { return false }
+        // Compare preference categories (morning, afternoon, evening)
+        switch (userPreferences.preferredWalkTime, userPreferences.preferredGymTime) {
+        case (.morning, .morning), (.afternoon, .afternoon), (.evening, .evening):
+            return true
+        case (.noPreference, _), (_, .noPreference):
+            return true // No preference means any time works
+        default:
+            return false
+        }
+    }
+
+    private var walkPreferenceLabel: String {
+        switch userPreferences.preferredWalkTime {
+        case .morning: return "Morning"
+        case .afternoon: return "Afternoon"
+        case .evening: return "Evening"
+        case .noPreference: return "Available"
+        }
+    }
+
+    private var workoutPreferenceLabel: String {
+        switch userPreferences.preferredGymTime {
+        case .morning: return "Morning"
+        case .afternoon: return "Afternoon"
+        case .evening: return "Evening"
+        case .noPreference: return "Available"
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(isToday ? "Suggested for Today" : "Suggested for Tomorrow")
                 .font(.headline)
 
-            // Suggested Walk
-            if let walk = suggestedWalk {
-                SuggestionCard(
-                    icon: walk.slotType == .walkableMeeting ? "phone.fill" : "figure.walk",
-                    color: .green,
-                    title: walk.source ?? "Walk Break",
-                    time: walk.timeRangeFormatted,
-                    subtitle: walk.targetStepsFormatted,
-                    badgeText: hasWalkHistory ? "Your Best Time" : "Best Time",
-                    reasonText: hasWalkHistory ? "Based on your past \(Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: Date()) - 1])s" : nil,
-                    onSchedule: onScheduleWalk
-                )
-            }
+            // If same preference time AND both walk and workout needed, show combined slot picker
+            if samePreferenceTime && suggestedWalk != nil {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("\(walkPreferenceLabel) Slots")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
 
-            // Suggested Workout
-            if hasWorkoutGoal, let workout = suggestedWorkout {
-                SuggestionCard(
-                    icon: "figure.strengthtraining.traditional",
-                    color: .orange,
-                    title: "Workout",
-                    time: workout.timeRangeFormatted,
-                    subtitle: "\(workout.duration) minutes",
-                    badgeText: hasWorkoutHistory ? "Your Best Time" : (workout.isRecommended ? "Recommended" : nil),
-                    reasonText: hasWorkoutHistory ? "Based on your past \(Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: Date()) - 1])s" : nil,
-                    onSchedule: onScheduleWorkout
-                )
+                    // Show the slot with both options
+                    if let walk = suggestedWalk {
+                        AvailableSlotCard(
+                            time: walk.timeRangeFormatted,
+                            duration: walk.duration,
+                            steps: walk.targetSteps,
+                            source: walk.source,
+                            hasWalkHistory: hasWalkHistory,
+                            hasWorkoutHistory: hasWorkoutHistory,
+                            hasWorkoutGoal: hasWorkoutGoal,
+                            onAddWalk: onScheduleWalk,
+                            onAddWorkout: hasWorkoutGoal ? onScheduleWorkout : nil
+                        )
+                    }
+
+                    // If there's a separate workout slot at a different time
+                    if let workout = suggestedWorkout,
+                       let walk = suggestedWalk,
+                       workout.startTime != walk.startTime {
+                        AvailableSlotCard(
+                            time: workout.timeRangeFormatted,
+                            duration: workout.duration,
+                            steps: nil,
+                            source: nil,
+                            hasWalkHistory: false,
+                            hasWorkoutHistory: hasWorkoutHistory,
+                            hasWorkoutGoal: true,
+                            onAddWalk: nil,
+                            onAddWorkout: onScheduleWorkout
+                        )
+                    }
+                }
+            } else {
+                // Different preference times - show separate sections
+
+                // Walk slot (morning/afternoon/evening based on preference)
+                if let walk = suggestedWalk {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("\(walkPreferenceLabel) - Walk")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        SuggestionCard(
+                            icon: walk.slotType == .walkableMeeting ? "phone.fill" : "figure.walk",
+                            color: .green,
+                            title: walk.source ?? "Walk Break",
+                            time: walk.timeRangeFormatted,
+                            subtitle: walk.targetStepsFormatted,
+                            badgeText: hasWalkHistory ? "Your Best Time" : "Best Time",
+                            reasonText: hasWalkHistory ? "Based on your past \(Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: Date()) - 1])s" : nil,
+                            onSchedule: onScheduleWalk
+                        )
+                    }
+                }
+
+                // Workout slot (at different time than walk)
+                if hasWorkoutGoal, let workout = suggestedWorkout {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("\(workoutPreferenceLabel) - Workout")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        SuggestionCard(
+                            icon: "figure.strengthtraining.traditional",
+                            color: .orange,
+                            title: "Workout",
+                            time: workout.timeRangeFormatted,
+                            subtitle: "\(workout.duration) minutes",
+                            badgeText: hasWorkoutHistory ? "Your Best Time" : (workout.isRecommended ? "Recommended" : nil),
+                            reasonText: hasWorkoutHistory ? "Based on your past \(Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: Date()) - 1])s" : nil,
+                            onSchedule: onScheduleWorkout
+                        )
+                    }
+                }
             }
 
             // Walkable Meetings (low-importance meetings)
@@ -1068,7 +1156,7 @@ struct SuggestedSlotsSection: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
 
-                    Text("These meetings may allow walking")
+                    Text("Walk during these meetings (~\(walkableMeetings.reduce(0) { $0 + $1.targetSteps }) steps)")
                         .font(.caption)
                         .foregroundColor(.secondary)
 
@@ -1079,6 +1167,87 @@ struct SuggestedSlotsSection: View {
                 .padding(.top, 8)
             }
         }
+    }
+}
+
+// MARK: - Available Slot Card (for same preference time)
+
+struct AvailableSlotCard: View {
+    let time: String
+    let duration: Int
+    let steps: Int?
+    let source: String?
+    let hasWalkHistory: Bool
+    let hasWorkoutHistory: Bool
+    let hasWorkoutGoal: Bool
+    var onAddWalk: (() -> Void)?
+    var onAddWorkout: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "clock")
+                    .foregroundColor(.blue)
+
+                Text(time)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Spacer()
+
+                Text("\(duration) min")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            if let source = source {
+                Text(source)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            HStack(spacing: 12) {
+                if let onAddWalk = onAddWalk {
+                    Button {
+                        onAddWalk()
+                    } label: {
+                        HStack {
+                            Image(systemName: "figure.walk")
+                            Text("Add Walk")
+                        }
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.green)
+                        .cornerRadius(8)
+                    }
+                }
+
+                if let onAddWorkout = onAddWorkout, hasWorkoutGoal {
+                    Button {
+                        onAddWorkout()
+                    } label: {
+                        HStack {
+                            Image(systemName: "figure.strengthtraining.traditional")
+                            Text("Add Workout")
+                        }
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.orange)
+                        .cornerRadius(8)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
     }
 }
 

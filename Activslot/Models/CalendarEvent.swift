@@ -26,6 +26,9 @@ struct CalendarEvent: Identifiable {
         // Duration must be >= 20 minutes
         guard duration >= 20 else { return false }
 
+        // Duration must be <= 120 minutes (2 hours) - no one can walk for longer
+        guard duration <= 120 else { return false }
+
         // Must have 4+ attendees (indicating it's a larger meeting where you can listen)
         guard attendeeCount >= 4 else { return false }
 
