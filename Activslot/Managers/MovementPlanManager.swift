@@ -314,14 +314,31 @@ class MovementPlanManager: ObservableObject {
         return result
     }
 
-    /// Select the best slot for workout based on user preference
+    /// Select the best slot for workout based on user preference AND historical patterns
     private func selectBestSlotForWorkout(from slots: [DateInterval]) -> DateInterval? {
         guard !slots.isEmpty else { return nil }
 
         let calendar = Calendar.current
         let preferredTime = userPreferences.preferredGymTime
 
-        // Sort by preference match
+        // Check if we have a best time from previous successful workouts on this weekday
+        let today = Date()
+        if let bestHistoricalTime = scheduledActivityManager.getBestTimeSuggestion(
+            for: .workout,
+            on: today,
+            duration: userPreferences.workoutDuration.rawValue
+        ) {
+            let bestHour = calendar.component(.hour, from: bestHistoricalTime)
+            // Find a slot that matches the historical best time
+            if let matchingSlot = slots.first(where: { slot in
+                let slotHour = calendar.component(.hour, from: slot.start)
+                return abs(slotHour - bestHour) <= 1 // Within 1 hour of best time
+            }) {
+                return matchingSlot
+            }
+        }
+
+        // Fall back to preference-based sorting
         let sorted = slots.sorted { slot1, slot2 in
             let hour1 = calendar.component(.hour, from: slot1.start)
             let hour2 = calendar.component(.hour, from: slot2.start)
@@ -345,7 +362,24 @@ class MovementPlanManager: ObservableObject {
         let calendar = Calendar.current
         let preferredTime = userPreferences.preferredWalkTime
 
-        // Sort by preference match
+        // Check if we have a best time from previous successful walks on this weekday
+        let today = Date()
+        if let bestHistoricalTime = scheduledActivityManager.getBestTimeSuggestion(
+            for: .walk,
+            on: today,
+            duration: 30 // Default walk duration
+        ) {
+            let bestHour = calendar.component(.hour, from: bestHistoricalTime)
+            // Find a slot that matches the historical best time
+            if let matchingSlot = slots.first(where: { slot in
+                let slotHour = calendar.component(.hour, from: slot.start)
+                return abs(slotHour - bestHour) <= 1 // Within 1 hour of best time
+            }) {
+                return matchingSlot
+            }
+        }
+
+        // Fall back to preference-based sorting
         let sorted = slots.sorted { slot1, slot2 in
             let hour1 = calendar.component(.hour, from: slot1.start)
             let hour2 = calendar.component(.hour, from: slot2.start)

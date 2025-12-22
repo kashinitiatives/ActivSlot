@@ -72,9 +72,14 @@ struct HomeView: View {
                     // Suggested Slots Section (only if no scheduled activities)
                     if scheduledForDay.isEmpty {
                         let currentPlan = selectedDay == .today ? planManager.todayPlan : planManager.tomorrowPlan
+                        // Get the primary suggestion (first slot) and walkable meetings separately
+                        let walkableMeetings = currentPlan?.stepSlots.filter { $0.slotType == .walkableMeeting } ?? []
+                        let primaryWalkSlot = currentPlan?.stepSlots.first(where: { $0.slotType == .freeTime }) ?? currentPlan?.stepSlots.first
+
                         SuggestedSlotsSection(
-                            suggestedWalk: currentPlan?.stepSlots.first,
+                            suggestedWalk: primaryWalkSlot,
                             suggestedWorkout: currentPlan?.workoutSlot,
+                            walkableMeetings: walkableMeetings,
                             hasWorkoutGoal: userPreferences.hasWorkoutGoal,
                             isToday: selectedDay == .today,
                             onScheduleWalk: { showScheduleWalk = true },
@@ -1005,10 +1010,23 @@ struct CommittedActivityRow: View {
 struct SuggestedSlotsSection: View {
     let suggestedWalk: StepSlot?
     let suggestedWorkout: WorkoutSlot?
+    let walkableMeetings: [StepSlot]
     let hasWorkoutGoal: Bool
     var isToday: Bool = true
     var onScheduleWalk: () -> Void
     var onScheduleWorkout: () -> Void
+    @StateObject private var scheduledActivityManager = ScheduledActivityManager.shared
+
+    // Check if we have historical patterns for this weekday
+    private var hasWalkHistory: Bool {
+        let patterns = scheduledActivityManager.getTimeSuggestions(for: .walk, on: Date())
+        return !patterns.isEmpty
+    }
+
+    private var hasWorkoutHistory: Bool {
+        let patterns = scheduledActivityManager.getTimeSuggestions(for: .workout, on: Date())
+        return !patterns.isEmpty
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -1018,12 +1036,13 @@ struct SuggestedSlotsSection: View {
             // Suggested Walk
             if let walk = suggestedWalk {
                 SuggestionCard(
-                    icon: "figure.walk",
+                    icon: walk.slotType == .walkableMeeting ? "phone.fill" : "figure.walk",
                     color: .green,
                     title: walk.source ?? "Walk Break",
                     time: walk.timeRangeFormatted,
                     subtitle: walk.targetStepsFormatted,
-                    badgeText: "Best Time",
+                    badgeText: hasWalkHistory ? "Your Best Time" : "Best Time",
+                    reasonText: hasWalkHistory ? "Based on your past \(Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: Date()) - 1])s" : nil,
                     onSchedule: onScheduleWalk
                 )
             }
@@ -1036,11 +1055,67 @@ struct SuggestedSlotsSection: View {
                     title: "Workout",
                     time: workout.timeRangeFormatted,
                     subtitle: "\(workout.duration) minutes",
-                    badgeText: workout.isRecommended ? "Recommended" : nil,
+                    badgeText: hasWorkoutHistory ? "Your Best Time" : (workout.isRecommended ? "Recommended" : nil),
+                    reasonText: hasWorkoutHistory ? "Based on your past \(Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: Date()) - 1])s" : nil,
                     onSchedule: onScheduleWorkout
                 )
             }
+
+            // Walkable Meetings (low-importance meetings)
+            if !walkableMeetings.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Low-Priority Meetings")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    Text("These meetings may allow walking")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    ForEach(walkableMeetings.prefix(3)) { meeting in
+                        WalkableMeetingRow(meeting: meeting)
+                    }
+                }
+                .padding(.top, 8)
+            }
         }
+    }
+}
+
+// MARK: - Walkable Meeting Row
+
+struct WalkableMeetingRow: View {
+    let meeting: StepSlot
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "phone.fill")
+                .font(.caption)
+                .foregroundColor(.blue)
+                .frame(width: 24, height: 24)
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(6)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(meeting.source ?? "Meeting")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+
+                Text(meeting.timeRangeFormatted)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            Text("~\(meeting.targetSteps) steps")
+                .font(.caption2)
+                .foregroundColor(.green)
+        }
+        .padding(8)
+        .background(Color(.tertiarySystemBackground))
+        .cornerRadius(8)
     }
 }
 
@@ -1053,6 +1128,7 @@ struct SuggestionCard: View {
     let time: String
     let subtitle: String
     var badgeText: String?
+    var reasonText: String? = nil
     var onSchedule: () -> Void
 
     var body: some View {
@@ -1090,6 +1166,16 @@ struct SuggestionCard: View {
                     Text(subtitle)
                         .font(.caption)
                         .foregroundColor(.secondary)
+
+                    if let reason = reasonText {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .font(.caption2)
+                            Text(reason)
+                                .font(.caption2)
+                        }
+                        .foregroundColor(.blue)
+                    }
                 }
 
                 Spacer()

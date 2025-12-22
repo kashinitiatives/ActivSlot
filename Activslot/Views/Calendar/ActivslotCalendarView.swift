@@ -12,6 +12,7 @@ enum CalendarViewMode: String, CaseIterable {
 
 struct ActivslotCalendarView: View {
     @StateObject private var activityStore = ActivityStore.shared
+    @StateObject private var scheduledActivityManager = ScheduledActivityManager.shared
     @EnvironmentObject var calendarManager: CalendarManager
 
     @State private var selectedDate = Date()
@@ -20,10 +21,44 @@ struct ActivslotCalendarView: View {
     @State private var selectedActivity: PlannedActivity?
     @State private var showActivityDetail = false
     @State private var externalEvents: [CalendarEvent] = []
+    @State private var showSyncSheet = false
+    @State private var isSyncing = false
+    @State private var syncSuccess = false
+
+    // Convert scheduled activities to planned activities for display
+    private var scheduledActivitiesAsPlanedForDate: [PlannedActivity] {
+        scheduledActivityManager.activities(for: selectedDate).compactMap { scheduled -> PlannedActivity? in
+            guard let timeRange = scheduled.getTimeRange(for: selectedDate) else { return nil }
+            return PlannedActivity(
+                title: scheduled.activityType == .workout ? "Workout" : scheduled.title,
+                activityType: scheduled.activityType,
+                startTime: timeRange.start,
+                duration: scheduled.duration,
+                recurrence: scheduled.recurrence == .once ? nil : scheduled.recurrence,
+                isCompleted: scheduledActivityManager.isCompleted(activity: scheduled, for: selectedDate)
+            )
+        }
+    }
+
+    // Combined activities
+    private var allActivitiesForDate: [PlannedActivity] {
+        let storeActivities = activityStore.activities(for: selectedDate)
+        let scheduledActivities = scheduledActivitiesAsPlanedForDate
+        // Combine and sort by start time
+        return (storeActivities + scheduledActivities).sorted { $0.startTime < $1.startTime }
+    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // Sync Header
+                CalendarSyncBar(
+                    isSyncing: isSyncing,
+                    syncSuccess: syncSuccess,
+                    hasActivities: !allActivitiesForDate.isEmpty,
+                    onSyncTap: { showSyncSheet = true }
+                )
+
                 // View Mode Picker
                 Picker("View", selection: $viewMode) {
                     ForEach(CalendarViewMode.allCases, id: \.self) { mode in
@@ -39,7 +74,7 @@ struct ActivslotCalendarView: View {
                 case .day:
                     DayCalendarView(
                         selectedDate: $selectedDate,
-                        activities: activitiesForSelectedDate,
+                        activities: allActivitiesForDate,
                         externalEvents: externalEvents,
                         onActivityTap: { activity in
                             selectedActivity = activity
@@ -98,6 +133,17 @@ struct ActivslotCalendarView: View {
                         .environmentObject(activityStore)
                 }
             }
+            .sheet(isPresented: $showSyncSheet) {
+                CalendarSyncToExternalSheet(
+                    activities: allActivitiesForDate,
+                    selectedDate: selectedDate,
+                    onSync: { calendarIDs in
+                        Task {
+                            await syncToExternalCalendars(calendarIDs)
+                        }
+                    }
+                )
+            }
             .task {
                 await loadExternalEvents()
             }
@@ -109,8 +155,51 @@ struct ActivslotCalendarView: View {
         }
     }
 
-    private var activitiesForSelectedDate: [PlannedActivity] {
-        activityStore.activities(for: selectedDate)
+    private func syncToExternalCalendars(_ calendarIDs: [String]) async {
+        isSyncing = true
+        defer { isSyncing = false }
+
+        do {
+            // Convert planned activities to step slots and workout slots for sync
+            var stepSlots: [StepSlot] = []
+            var workoutSlot: WorkoutSlot? = nil
+
+            for activity in allActivitiesForDate {
+                if activity.activityType == .walk {
+                    stepSlots.append(StepSlot(
+                        startTime: activity.startTime,
+                        endTime: Calendar.current.date(byAdding: .minute, value: activity.duration, to: activity.startTime) ?? activity.startTime,
+                        slotType: .freeTime,
+                        targetSteps: activity.duration * 100,
+                        source: activity.title
+                    ))
+                } else if activity.activityType == .workout && workoutSlot == nil {
+                    workoutSlot = WorkoutSlot(
+                        startTime: activity.startTime,
+                        endTime: Calendar.current.date(byAdding: .minute, value: activity.duration, to: activity.startTime) ?? activity.startTime,
+                        workoutType: .fullBody,
+                        isRecommended: true
+                    )
+                }
+            }
+
+            try await CalendarSyncService.shared.syncMovementPlan(
+                stepSlots: stepSlots,
+                workoutSlot: workoutSlot,
+                toCalendars: calendarIDs
+            )
+
+            await MainActor.run {
+                syncSuccess = true
+            }
+
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run {
+                syncSuccess = false
+            }
+        } catch {
+            print("Sync failed: \(error)")
+        }
     }
 
     private func loadExternalEvents() async {
@@ -696,6 +785,155 @@ struct MonthDayCell: View {
         if isToday { return .blue }
         if isSelected { return .blue.opacity(0.1) }
         return .clear
+    }
+}
+
+// MARK: - Calendar Sync Bar
+
+struct CalendarSyncBar: View {
+    let isSyncing: Bool
+    let syncSuccess: Bool
+    let hasActivities: Bool
+    let onSyncTap: () -> Void
+
+    var body: some View {
+        HStack {
+            if syncSuccess {
+                Label("Synced!", systemImage: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundColor(.green)
+            } else if hasActivities {
+                Text("Scheduled activities")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("No activities scheduled")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                onSyncTap()
+            } label: {
+                HStack(spacing: 4) {
+                    if isSyncing {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                    Text("Sync")
+                }
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.blue)
+            }
+            .disabled(isSyncing || !hasActivities)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color(.secondarySystemBackground))
+    }
+}
+
+// MARK: - Calendar Sync To External Sheet
+
+struct CalendarSyncToExternalSheet: View {
+    let activities: [PlannedActivity]
+    let selectedDate: Date
+    let onSync: ([String]) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var calendarManager: CalendarManager
+    @State private var selectedCalendars: Set<String> = []
+
+    var body: some View {
+        NavigationStack {
+            List {
+                // Activities to sync
+                Section("Activities to Sync") {
+                    if activities.isEmpty {
+                        Text("No activities for this day")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(activities) { activity in
+                            HStack {
+                                Image(systemName: activity.icon)
+                                    .foregroundColor(activity.color)
+                                    .frame(width: 24)
+
+                                VStack(alignment: .leading) {
+                                    Text(activity.title)
+                                        .font(.subheadline)
+                                    Text(activity.timeRangeFormatted)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+
+                                Text("\(activity.duration) min")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+
+                // Calendar selection
+                Section("Sync To") {
+                    ForEach(calendarManager.availableCalendars) { calendar in
+                        Button {
+                            if selectedCalendars.contains(calendar.id) {
+                                selectedCalendars.remove(calendar.id)
+                            } else {
+                                selectedCalendars.insert(calendar.id)
+                            }
+                        } label: {
+                            HStack {
+                                Circle()
+                                    .fill(calendar.color)
+                                    .frame(width: 12, height: 12)
+
+                                VStack(alignment: .leading) {
+                                    Text(calendar.title)
+                                        .foregroundColor(.primary)
+                                    Text(calendar.source)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+
+                                if selectedCalendars.contains(calendar.id) {
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Sync to Calendar")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Sync") {
+                        onSync(Array(selectedCalendars))
+                        dismiss()
+                    }
+                    .disabled(selectedCalendars.isEmpty || activities.isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }
 
