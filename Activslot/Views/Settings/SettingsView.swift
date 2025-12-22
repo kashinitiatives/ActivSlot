@@ -249,16 +249,7 @@ struct SettingsView: View {
                         }
                         .font(.caption)
                     }
-                } header: {
-                    Text("Step Goal")
-                } footer: {
-                    if let age = userPreferences.ageGroup {
-                        Text("Recommended for \(age.rawValue): \(age.recommendedSteps.formatted()) steps/day")
-                    }
-                }
 
-                // Walk Preferences
-                Section {
                     Picker("Preferred walk time", selection: Binding(
                         get: { userPreferences.preferredWalkTime },
                         set: { userPreferences.preferredWalkTime = $0 }
@@ -268,9 +259,13 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("Walk Preferences")
+                    Text("Step Goal")
                 } footer: {
-                    Text("Walk suggestions will prioritize your preferred time of day")
+                    if let age = userPreferences.ageGroup {
+                        Text("Recommended for \(age.rawValue): \(age.recommendedSteps.formatted()) steps/day. Walk suggestions will prioritize your preferred time.")
+                    } else {
+                        Text("Walk suggestions will prioritize your preferred time of day")
+                    }
                 }
 
                 // Workout Preferences

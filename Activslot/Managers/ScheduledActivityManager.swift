@@ -223,6 +223,22 @@ struct ScheduleConflict: Identifiable {
     }
 }
 
+// MARK: - Activity Completion Record
+
+struct ActivityCompletion: Codable, Identifiable {
+    let id: UUID
+    let activityId: UUID
+    let date: Date
+    let completedAt: Date
+
+    init(activityId: UUID, date: Date) {
+        self.id = UUID()
+        self.activityId = activityId
+        self.date = Calendar.current.startOfDay(for: date)
+        self.completedAt = Date()
+    }
+}
+
 // MARK: - Scheduled Activity Manager
 
 class ScheduledActivityManager: ObservableObject {
@@ -231,13 +247,16 @@ class ScheduledActivityManager: ObservableObject {
     @Published var scheduledActivities: [ScheduledActivity] = []
     @Published var timePatterns: [ActivityTimePattern] = []
     @Published var conflicts: [ScheduleConflict] = []
+    @Published var completions: [ActivityCompletion] = []
 
     private let saveKey = "scheduledActivities"
     private let patternsKey = "activityTimePatterns"
+    private let completionsKey = "activityCompletions"
 
     private init() {
         loadScheduledActivities()
         loadTimePatterns()
+        loadCompletions()
     }
 
     // MARK: - CRUD Operations
@@ -461,6 +480,62 @@ class ScheduledActivityManager: ObservableObject {
         }
     }
 
+    // MARK: - Activity Completion Tracking
+
+    /// Check if an activity is completed for a specific date
+    func isCompleted(activity: ScheduledActivity, for date: Date) -> Bool {
+        let dayStart = Calendar.current.startOfDay(for: date)
+        return completions.contains { $0.activityId == activity.id && $0.date == dayStart }
+    }
+
+    /// Mark an activity as completed for a specific date
+    func markCompleted(activity: ScheduledActivity, for date: Date) {
+        guard !isCompleted(activity: activity, for: date) else { return }
+
+        let completion = ActivityCompletion(activityId: activity.id, date: date)
+        completions.append(completion)
+        saveCompletions()
+
+        // Record pattern for learning
+        recordCompletedActivity(
+            type: activity.activityType,
+            workoutType: activity.workoutType,
+            at: date,
+            duration: activity.duration,
+            wasSuccessful: true
+        )
+    }
+
+    /// Unmark an activity as completed for a specific date
+    func markIncomplete(activity: ScheduledActivity, for date: Date) {
+        let dayStart = Calendar.current.startOfDay(for: date)
+        completions.removeAll { $0.activityId == activity.id && $0.date == dayStart }
+        saveCompletions()
+    }
+
+    /// Toggle completion status
+    func toggleCompletion(activity: ScheduledActivity, for date: Date) {
+        if isCompleted(activity: activity, for: date) {
+            markIncomplete(activity: activity, for: date)
+        } else {
+            markCompleted(activity: activity, for: date)
+        }
+    }
+
+    /// Get completed activities for a specific date
+    func completedActivities(for date: Date) -> [ScheduledActivity] {
+        let dayStart = Calendar.current.startOfDay(for: date)
+        let completedIds = completions.filter { $0.date == dayStart }.map { $0.activityId }
+        return scheduledActivities.filter { completedIds.contains($0.id) && $0.occursOn(date: date) }
+    }
+
+    /// Get incomplete activities for a specific date
+    func incompleteActivities(for date: Date) -> [ScheduledActivity] {
+        let dayStart = Calendar.current.startOfDay(for: date)
+        let completedIds = completions.filter { $0.date == dayStart }.map { $0.activityId }
+        return activities(for: date).filter { !completedIds.contains($0.id) }
+    }
+
     // MARK: - Persistence
 
     private func saveScheduledActivities() {
@@ -486,6 +561,23 @@ class ScheduledActivityManager: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: patternsKey),
            let decoded = try? JSONDecoder().decode([ActivityTimePattern].self, from: data) {
             timePatterns = decoded
+        }
+    }
+
+    private func saveCompletions() {
+        // Clean up old completions (older than 30 days)
+        let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+        completions.removeAll { $0.date < thirtyDaysAgo }
+
+        if let encoded = try? JSONEncoder().encode(completions) {
+            UserDefaults.standard.set(encoded, forKey: completionsKey)
+        }
+    }
+
+    private func loadCompletions() {
+        if let data = UserDefaults.standard.data(forKey: completionsKey),
+           let decoded = try? JSONDecoder().decode([ActivityCompletion].self, from: data) {
+            completions = decoded
         }
     }
 }

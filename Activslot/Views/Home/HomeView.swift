@@ -769,20 +769,8 @@ struct MovementPlanSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text(plan.isToday ? "Available Slots" : "Tomorrow's Slots")
-                    .font(.headline)
-
-                Spacer()
-
-                Button {
-                    showCalendar = true
-                } label: {
-                    Label("Calendar", systemImage: "calendar")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
-            }
+            Text(plan.isToday ? "Available Slots" : "Tomorrow's Slots")
+                .font(.headline)
 
             // Step Slots (walkable meetings and free time)
             if !plan.stepSlots.isEmpty {
@@ -858,12 +846,17 @@ struct ConflictsAlertSection: View {
     }
 }
 
-// MARK: - Scheduled Activities Section
+// MARK: - Scheduled Activities Section (Committed List with Checkboxes)
 
 struct ScheduledActivitiesSection: View {
     let activities: [ScheduledActivity]
     let date: Date
     var onViewAll: () -> Void
+    @ObservedObject var scheduledActivityManager = ScheduledActivityManager.shared
+
+    private var isToday: Bool {
+        Calendar.current.isDateInToday(date)
+    }
 
     private var timeFormatter: DateFormatter {
         let f = DateFormatter()
@@ -874,10 +867,17 @@ struct ScheduledActivitiesSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Your Schedule")
+                Text(isToday ? "Your Commitments" : "Your Schedule")
                     .font(.headline)
 
                 Spacer()
+
+                if isToday {
+                    let completed = activities.filter { scheduledActivityManager.isCompleted(activity: $0, for: date) }.count
+                    Text("\(completed)/\(activities.count)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
 
                 Button {
                     onViewAll()
@@ -890,46 +890,113 @@ struct ScheduledActivitiesSection: View {
 
             ForEach(activities) { activity in
                 if let timeRange = activity.getTimeRange(for: date) {
-                    HStack(spacing: 12) {
-                        Image(systemName: activity.icon)
-                            .font(.title3)
-                            .foregroundColor(activity.color)
-                            .frame(width: 36, height: 36)
-                            .background(activity.color.opacity(0.1))
-                            .cornerRadius(8)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(activity.title)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-
-                            HStack(spacing: 6) {
-                                Text("\(timeFormatter.string(from: timeRange.start)) - \(timeFormatter.string(from: timeRange.end))")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-
-                                if activity.recurrence != .once {
-                                    Text("•")
-                                        .foregroundColor(.secondary)
-                                    Image(systemName: "repeat")
-                                        .font(.caption2)
-                                        .foregroundColor(.blue)
-                                }
+                    CommittedActivityRow(
+                        activity: activity,
+                        timeRange: timeRange,
+                        isCompleted: scheduledActivityManager.isCompleted(activity: activity, for: date),
+                        isToday: isToday,
+                        onToggle: {
+                            withAnimation(.spring(response: 0.3)) {
+                                scheduledActivityManager.toggleCompletion(activity: activity, for: date)
                             }
                         }
-
-                        Spacer()
-
-                        Text("\(activity.duration) min")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(12)
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(12)
+                    )
                 }
             }
         }
+    }
+}
+
+// MARK: - Committed Activity Row
+
+struct CommittedActivityRow: View {
+    let activity: ScheduledActivity
+    let timeRange: (start: Date, end: Date)
+    let isCompleted: Bool
+    let isToday: Bool
+    var onToggle: () -> Void
+
+    private var timeFormatter: DateFormatter {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        return f
+    }
+
+    // Simplified title for workout
+    private var displayTitle: String {
+        if activity.activityType == .workout {
+            return "Workout"
+        }
+        return activity.title
+    }
+
+    // Simplified icon for workout
+    private var displayIcon: String {
+        if activity.activityType == .workout {
+            return "figure.strengthtraining.traditional"
+        }
+        return activity.icon
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Checkbox for today
+            if isToday {
+                Button {
+                    onToggle()
+                } label: {
+                    Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                        .font(.title2)
+                        .foregroundColor(isCompleted ? .green : .gray)
+                }
+            }
+
+            Image(systemName: displayIcon)
+                .font(.title3)
+                .foregroundColor(isCompleted ? .gray : activity.color)
+                .frame(width: 36, height: 36)
+                .background((isCompleted ? Color.gray : activity.color).opacity(0.1))
+                .cornerRadius(8)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(displayTitle)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .strikethrough(isCompleted, color: .gray)
+                    .foregroundColor(isCompleted ? .secondary : .primary)
+
+                HStack(spacing: 6) {
+                    Text("\(timeFormatter.string(from: timeRange.start)) - \(timeFormatter.string(from: timeRange.end))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    if activity.recurrence != .once {
+                        Text("•")
+                            .foregroundColor(.secondary)
+                        Image(systemName: "repeat")
+                            .font(.caption2)
+                            .foregroundColor(.blue)
+                    }
+                }
+            }
+
+            Spacer()
+
+            if isCompleted && isToday {
+                Text("Done")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.green)
+            } else {
+                Text("\(activity.duration) min")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+        .opacity(isCompleted ? 0.8 : 1.0)
     }
 }
 
@@ -964,11 +1031,11 @@ struct SuggestedSlotsSection: View {
             // Suggested Workout
             if hasWorkoutGoal, let workout = suggestedWorkout {
                 SuggestionCard(
-                    icon: workout.workoutType.icon,
+                    icon: "figure.strengthtraining.traditional",
                     color: .orange,
-                    title: "\(workout.workoutType.rawValue) Workout",
+                    title: "Workout",
                     time: workout.timeRangeFormatted,
-                    subtitle: workout.workoutType.description,
+                    subtitle: "\(workout.duration) minutes",
                     badgeText: workout.isRecommended ? "Recommended" : nil,
                     onSchedule: onScheduleWorkout
                 )
@@ -1112,7 +1179,7 @@ struct WorkoutSlotCard: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: slot.workoutType.icon)
+            Image(systemName: "figure.strengthtraining.traditional")
                 .font(.system(size: 20))
                 .foregroundColor(.orange)
                 .frame(width: 40, height: 40)
@@ -1122,8 +1189,8 @@ struct WorkoutSlotCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("Workout")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
 
                     if slot.isRecommended {
                         Text("Best Time")
@@ -1138,13 +1205,8 @@ struct WorkoutSlotCard: View {
                 }
 
                 Text(slot.timeRangeFormatted)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-
-                Text("\(slot.workoutType.rawValue) - \(slot.workoutType.description)")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                    .lineLimit(1)
             }
 
             Spacer()
