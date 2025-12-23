@@ -464,14 +464,17 @@ struct ActivityDetailSheet: View {
     @EnvironmentObject var activityStore: ActivityStore
 
     let activity: PlannedActivity
+    let startInEditMode: Bool
 
-    @State private var isEditing = false
+    @State private var isEditing: Bool
     @State private var editedActivity: PlannedActivity
     @State private var showDeleteConfirmation = false
 
-    init(activity: PlannedActivity) {
+    init(activity: PlannedActivity, startInEditMode: Bool = false) {
         self.activity = activity
+        self.startInEditMode = startInEditMode
         _editedActivity = State(initialValue: activity)
+        _isEditing = State(initialValue: startInEditMode)
     }
 
     var body: some View {

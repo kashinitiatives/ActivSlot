@@ -276,6 +276,16 @@ class ActivityStore: ObservableObject {
         }
     }
 
+    /// Update the duration of an activity (used for drag-to-resize in calendar)
+    func updateActivityDuration(_ activity: PlannedActivity, to newDuration: Int) {
+        if let index = activities.firstIndex(where: { $0.id == activity.id }) {
+            var updated = activities[index]
+            updated.updateDuration(minutes: max(15, newDuration))
+            activities[index] = updated
+            saveActivities()
+        }
+    }
+
     func deleteActivity(at offsets: IndexSet, from dayActivities: [PlannedActivity]) {
         for index in offsets {
             let activity = dayActivities[index]

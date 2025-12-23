@@ -19,10 +19,43 @@ struct CalendarEvent: Identifiable {
     private static let nonWalkableKeywords = [
         "interview", "presentation", "review", "demo",
         "standup", "stand-up", "all hands", "all-hands",
-        "training", "workshop", "onsite", "on-site"
+        "training", "workshop", "onsite", "on-site",
+        "out of office", "ooo", "pto", "vacation", "holiday",
+        "focus time", "busy", "blocked", "do not disturb"
     ]
 
+    /// Check if this is an all-day event (24 hours or more)
+    var isAllDay: Bool {
+        duration >= 1440 // 24 hours = 1440 minutes
+    }
+
+    /// Keywords that indicate an out-of-office or time-off event
+    private static let outOfOfficeKeywords = [
+        "out of office", "ooo", "pto", "vacation", "holiday",
+        "off", "leave", "away", "time off", "day off", "sick"
+    ]
+
+    /// Check if this is an out-of-office or time-off event
+    var isOutOfOffice: Bool {
+        let lowercaseTitle = title.lowercased()
+        for keyword in Self.outOfOfficeKeywords {
+            if lowercaseTitle.contains(keyword) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Check if this event should be counted as real meeting time for insights
+    /// Excludes all-day events and out-of-office events
+    var isRealMeeting: Bool {
+        !isAllDay && !isOutOfOffice
+    }
+
     var isWalkable: Bool {
+        // All-day events are NOT walkable (e.g., Out of Office, holidays)
+        guard !isAllDay else { return false }
+
         // Duration must be >= 20 minutes
         guard duration >= 20 else { return false }
 

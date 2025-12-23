@@ -554,6 +554,197 @@ struct ScheduledActivityRow: View {
     }
 }
 
+// MARK: - Edit Scheduled Activity Sheet
+
+struct EditScheduledActivitySheet: View {
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var scheduledActivityManager = ScheduledActivityManager.shared
+
+    let activity: ScheduledActivity
+
+    @State private var selectedTime: Date
+    @State private var selectedDuration: Int
+    @State private var selectedRecurrence: RecurrenceRule
+    @State private var customTitle: String
+    @State private var selectedScope: ScheduledActivityManager.UpdateScope = .thisOccurrence
+    @State private var showDeleteConfirmation = false
+
+    init(activity: ScheduledActivity) {
+        self.activity = activity
+
+        // Set initial values from activity
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day], from: Date())
+        components.hour = activity.startHour
+        components.minute = activity.startMinute
+        let initialTime = calendar.date(from: components) ?? Date()
+
+        self._selectedTime = State(initialValue: initialTime)
+        self._selectedDuration = State(initialValue: activity.duration)
+        self._selectedRecurrence = State(initialValue: activity.recurrence)
+        self._customTitle = State(initialValue: activity.title)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                // Activity Info Section
+                Section {
+                    HStack {
+                        Image(systemName: activity.icon)
+                            .font(.title2)
+                            .foregroundColor(activity.color)
+                            .frame(width: 44, height: 44)
+                            .background(activity.color.opacity(0.1))
+                            .cornerRadius(10)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(activity.activityType.rawValue)
+                                .font(.headline)
+
+                            if let workoutType = activity.workoutType {
+                                Text(workoutType.description)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+
+                    TextField("Title", text: $customTitle)
+                }
+
+                // Time Selection
+                Section {
+                    DatePicker(
+                        "Start Time",
+                        selection: $selectedTime,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+
+                    Picker("Duration", selection: $selectedDuration) {
+                        ForEach([15, 20, 30, 45, 60, 90], id: \.self) { minutes in
+                            Text("\(minutes) min").tag(minutes)
+                        }
+                    }
+                } header: {
+                    Text("Time")
+                }
+
+                // Recurrence Options
+                Section {
+                    ForEach(RecurrenceRule.allCases, id: \.self) { rule in
+                        Button {
+                            selectedRecurrence = rule
+                        } label: {
+                            HStack {
+                                Image(systemName: rule.icon)
+                                    .foregroundColor(.blue)
+                                    .frame(width: 28)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(rule.rawValue)
+                                        .foregroundColor(.primary)
+                                    Text(rule.description)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+
+                                if selectedRecurrence == rule {
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Repeat")
+                }
+
+                // Scope Selection (for recurring activities)
+                if activity.recurrence != .once {
+                    Section {
+                        Picker("Apply Changes", selection: $selectedScope) {
+                            Text("Just Today").tag(ScheduledActivityManager.UpdateScope.thisOccurrence)
+                            Text("This & Future").tag(ScheduledActivityManager.UpdateScope.thisAndFuture)
+                            Text("All Occurrences").tag(ScheduledActivityManager.UpdateScope.allOccurrences)
+                        }
+                        .pickerStyle(.segmented)
+                    } header: {
+                        Text("Update Scope")
+                    } footer: {
+                        switch selectedScope {
+                        case .thisOccurrence:
+                            Text("Only changes today's schedule")
+                        case .thisAndFuture:
+                            Text("Changes this and all future occurrences")
+                        case .allOccurrences:
+                            Text("Changes all occurrences including past")
+                        }
+                    }
+                }
+
+                // Delete Section
+                Section {
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Label("Delete Activity", systemImage: "trash")
+                            Spacer()
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Edit Activity")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save") {
+                        saveChanges()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            .alert("Delete Activity?", isPresented: $showDeleteConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    scheduledActivityManager.deleteScheduledActivity(activity)
+                    dismiss()
+                }
+            } message: {
+                if activity.recurrence == .once {
+                    Text("This will remove the scheduled \(activity.title).")
+                } else {
+                    Text("This will remove all occurrences of \(activity.title).")
+                }
+            }
+        }
+    }
+
+    private func saveChanges() {
+        // Update the activity with new values
+        scheduledActivityManager.updateScheduledActivity(
+            activity,
+            newTime: selectedTime,
+            newDuration: selectedDuration,
+            newTitle: customTitle,
+            newRecurrence: selectedRecurrence,
+            scope: selectedScope
+        )
+        dismiss()
+    }
+}
+
 #Preview {
     ScheduleActivitySheet(
         activityType: .walk,

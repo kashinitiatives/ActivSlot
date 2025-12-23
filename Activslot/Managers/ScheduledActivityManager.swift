@@ -295,6 +295,16 @@ class ScheduledActivityManager: ObservableObject {
         }
     }
 
+    /// Update the duration of a scheduled activity (used for drag-to-resize in calendar)
+    func updateActivityDuration(_ activity: ScheduledActivity, to newDuration: Int) {
+        if let index = scheduledActivities.firstIndex(where: { $0.id == activity.id }) {
+            var updatedActivity = scheduledActivities[index]
+            updatedActivity.duration = max(15, newDuration) // Minimum 15 minutes
+            scheduledActivities[index] = updatedActivity
+            saveScheduledActivities()
+        }
+    }
+
     // MARK: - Query Methods
 
     /// Get all scheduled activities for a specific date
@@ -405,6 +415,137 @@ class ScheduledActivityManager: ObservableObject {
             .sorted { $0.successRate > $1.successRate }
     }
 
+    /// Get the last completed workout on the same weekday (for pattern suggestions)
+    func getLastSameWeekdayWorkout(for date: Date) -> (time: Date, weekdayName: String)? {
+        let calendar = Calendar.current
+        let targetWeekday = calendar.component(.weekday, from: date)
+        let weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+        let weekdayName = weekdayNames[targetWeekday - 1]
+
+        // First try: Look at completions for workouts on the same weekday
+        let workoutPatterns = timePatterns
+            .filter { $0.weekday == targetWeekday && $0.activityType == .workout && $0.totalCount > 0 }
+            .sorted { $0.successRate > $1.successRate }
+
+        if let bestPattern = workoutPatterns.first {
+            var components = calendar.dateComponents([.year, .month, .day], from: date)
+            components.hour = bestPattern.hour
+            components.minute = bestPattern.minute
+            if let suggestedTime = calendar.date(from: components) {
+                return (time: suggestedTime, weekdayName: weekdayName)
+            }
+        }
+
+        // Second try: Look at past scheduled workout activities for the same weekday
+        for weeksAgo in 1...4 {
+            guard let pastDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: date) else { continue }
+
+            let pastWorkouts = scheduledActivities.filter { activity in
+                guard activity.activityType == .workout else { return false }
+                return activity.occursOn(date: pastDate)
+            }
+
+            if let workout = pastWorkouts.first {
+                var components = calendar.dateComponents([.year, .month, .day], from: date)
+                components.hour = workout.startHour
+                components.minute = workout.startMinute
+                if let suggestedTime = calendar.date(from: components) {
+                    return (time: suggestedTime, weekdayName: weekdayName)
+                }
+            }
+        }
+
+        // Third try: Look for any recurring workout that matches this weekday
+        let recurringWorkouts = scheduledActivities.filter { activity in
+            guard activity.activityType == .workout else { return false }
+            guard activity.recurrence != .once else { return false }
+
+            if activity.recurrence == .weekdays {
+                return targetWeekday >= 2 && targetWeekday <= 6
+            } else if activity.recurrence == .weekly || activity.recurrence == .biweekly {
+                return activity.weekday == targetWeekday
+            }
+            return false
+        }
+
+        if let workout = recurringWorkouts.first {
+            var components = calendar.dateComponents([.year, .month, .day], from: date)
+            components.hour = workout.startHour
+            components.minute = workout.startMinute
+            if let suggestedTime = calendar.date(from: components) {
+                return (time: suggestedTime, weekdayName: weekdayName)
+            }
+        }
+
+        return nil
+    }
+
+    /// Get formatted message for workout suggestion based on history
+    func getWorkoutHistoryMessage(for date: Date) -> String? {
+        let calendar = Calendar.current
+        let targetWeekday = calendar.component(.weekday, from: date)
+        let weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+        let weekdayName = weekdayNames[targetWeekday - 1]
+
+        // First try: Look at completion patterns
+        let workoutPatterns = timePatterns
+            .filter { $0.weekday == targetWeekday && $0.activityType == .workout && $0.totalCount > 0 }
+            .sorted { $0.successRate > $1.successRate }
+
+        if let pattern = workoutPatterns.first {
+            return "You worked out last \(weekdayName) at \(pattern.timeFormatted)"
+        }
+
+        // Second try: Look at past scheduled workout activities for the same weekday
+        // Check last 4 weeks for workouts on the same weekday
+        for weeksAgo in 1...4 {
+            guard let pastDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: date) else { continue }
+
+            let pastWorkouts = scheduledActivities.filter { activity in
+                guard activity.activityType == .workout else { return false }
+                return activity.occursOn(date: pastDate)
+            }
+
+            if let workout = pastWorkouts.first {
+                let formatter = DateFormatter()
+                formatter.timeStyle = .short
+                var components = calendar.dateComponents([.year, .month, .day], from: date)
+                components.hour = workout.startHour
+                components.minute = workout.startMinute
+                if let time = calendar.date(from: components) {
+                    return "You worked out last \(weekdayName) at \(formatter.string(from: time))"
+                }
+            }
+        }
+
+        // Third try: Look for any recurring workout that matches this weekday
+        let recurringWorkouts = scheduledActivities.filter { activity in
+            guard activity.activityType == .workout else { return false }
+            guard activity.recurrence != .once else { return false }
+
+            // Check if the activity recurs on this weekday
+            if activity.recurrence == .weekdays {
+                return targetWeekday >= 2 && targetWeekday <= 6 // Mon-Fri
+            } else if activity.recurrence == .weekly || activity.recurrence == .biweekly {
+                return activity.weekday == targetWeekday
+            }
+            return false
+        }
+
+        if let workout = recurringWorkouts.first {
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+            var components = calendar.dateComponents([.year, .month, .day], from: date)
+            components.hour = workout.startHour
+            components.minute = workout.startMinute
+            if let time = calendar.date(from: components) {
+                return "Your usual workout time on \(weekdayName)s"
+            }
+        }
+
+        return nil
+    }
+
     // MARK: - Conflict Detection
 
     /// Check for conflicts between scheduled activities and calendar events
@@ -412,14 +553,32 @@ class ScheduledActivityManager: ObservableObject {
         var foundConflicts: [ScheduleConflict] = []
         let dayActivities = activities(for: date)
 
+        // Filter out events that shouldn't cause conflicts:
+        // 1. All-day events (Out of Office, vacations, etc.)
+        // 2. Events created by Activslot (to avoid duplicate conflicts)
+        let relevantEvents = events.filter { event in
+            // Skip all-day events (24+ hours)
+            guard !event.isAllDay else { return false }
+
+            // Skip Activslot-created events (check title patterns)
+            let lowercaseTitle = event.title.lowercased()
+            let isActivslotEvent = lowercaseTitle.contains("walk") ||
+                                   lowercaseTitle.contains("workout") ||
+                                   lowercaseTitle.contains("activslot") ||
+                                   (event.notes?.contains("Activslot") ?? false)
+            guard !isActivslotEvent else { return false }
+
+            return true
+        }
+
         for activity in dayActivities {
             guard let timeRange = activity.getTimeRange(for: date) else { continue }
 
-            for event in events {
+            for event in relevantEvents {
                 // Check for overlap
                 let hasOverlap = timeRange.start < event.endDate && timeRange.end > event.startDate
 
-                // Check if too close (within 30 minutes)
+                // Check if too close (within 30 minutes) - only for real meetings
                 let tooCloseBefore = abs(timeRange.end.timeIntervalSince(event.startDate)) < 30 * 60
                 let tooCloseAfter = abs(event.endDate.timeIntervalSince(timeRange.start)) < 30 * 60
 
@@ -453,6 +612,17 @@ class ScheduledActivityManager: ObservableObject {
 
     /// Update a scheduled activity with scope options
     func updateScheduledActivity(_ activity: ScheduledActivity, newTime: Date, scope: UpdateScope) {
+        updateScheduledActivity(activity, newTime: newTime, newDuration: nil, newTitle: nil, newRecurrence: nil, scope: scope)
+    }
+
+    func updateScheduledActivity(
+        _ activity: ScheduledActivity,
+        newTime: Date,
+        newDuration: Int? = nil,
+        newTitle: String? = nil,
+        newRecurrence: RecurrenceRule? = nil,
+        scope: UpdateScope
+    ) {
         let calendar = Calendar.current
 
         switch scope {
@@ -464,6 +634,8 @@ class ScheduledActivityManager: ObservableObject {
             newActivity.startHour = calendar.component(.hour, from: newTime)
             newActivity.startMinute = calendar.component(.minute, from: newTime)
             newActivity.startDate = calendar.startOfDay(for: newTime)
+            if let duration = newDuration { newActivity.duration = duration }
+            if let title = newTitle { newActivity.title = title }
             addScheduledActivity(newActivity)
 
             // Original activity continues as is (ideally we'd add exception dates)
@@ -479,6 +651,9 @@ class ScheduledActivityManager: ObservableObject {
                 newActivity.startHour = calendar.component(.hour, from: newTime)
                 newActivity.startMinute = calendar.component(.minute, from: newTime)
                 newActivity.startDate = calendar.startOfDay(for: newTime)
+                if let duration = newDuration { newActivity.duration = duration }
+                if let title = newTitle { newActivity.title = title }
+                if let recurrence = newRecurrence { newActivity.recurrence = recurrence }
                 addScheduledActivity(newActivity)
             }
 
@@ -487,6 +662,9 @@ class ScheduledActivityManager: ObservableObject {
             if var original = scheduledActivities.first(where: { $0.id == activity.id }) {
                 original.startHour = calendar.component(.hour, from: newTime)
                 original.startMinute = calendar.component(.minute, from: newTime)
+                if let duration = newDuration { original.duration = duration }
+                if let title = newTitle { original.title = title }
+                if let recurrence = newRecurrence { original.recurrence = recurrence }
                 updateScheduledActivity(original)
             }
         }

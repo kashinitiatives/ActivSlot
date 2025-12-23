@@ -7,6 +7,10 @@ struct HomeView: View {
     @StateObject private var planManager = MovementPlanManager.shared
     @StateObject private var insightsManager = PersonalInsightsManager.shared
     @StateObject private var scheduledActivityManager = ScheduledActivityManager.shared
+    @StateObject private var activityStore = ActivityStore.shared
+
+    // Trigger to reset to Today tab when bottom tab is tapped
+    var resetToTodayTrigger: Int = 0
 
     @State private var isRefreshing = false
     @State private var showWorkoutSetup = false
@@ -49,12 +53,14 @@ struct HomeView: View {
                         )
                     }
 
-                    // Scheduled Activities Section
+                    // Scheduled Activities Section (includes both ScheduledActivity and PlannedActivity)
                     let currentDate = selectedDay == .today ? Date() : Calendar.current.date(byAdding: .day, value: 1, to: Date())!
                     let scheduledForDay = scheduledActivityManager.activities(for: currentDate)
-                    if !scheduledForDay.isEmpty {
+                    let calendarActivitiesForDay = activityStore.activities(for: currentDate)
+                    if !scheduledForDay.isEmpty || !calendarActivitiesForDay.isEmpty {
                         ScheduledActivitiesSection(
                             activities: scheduledForDay,
+                            calendarActivities: calendarActivitiesForDay,
                             date: currentDate,
                             onViewAll: { showScheduledActivities = true }
                         )
@@ -73,36 +79,90 @@ struct HomeView: View {
                         WorkoutSetupPrompt(showSetup: $showWorkoutSetup)
                     }
 
-                    // Suggested Slots Section (only if no scheduled activities)
-                    if scheduledForDay.isEmpty {
-                        let currentPlan = selectedDay == .today ? planManager.todayPlan : planManager.tomorrowPlan
-                        // Get the primary suggestion (first slot) and walkable meetings separately
-                        let walkableMeetings = currentPlan?.stepSlots.filter { $0.slotType == .walkableMeeting } ?? []
-                        let freeTimeSlots = currentPlan?.stepSlots.filter { $0.slotType == .freeTime } ?? []
-                        let primaryWalkSlot = freeTimeSlots.first ?? currentPlan?.stepSlots.first
+                    // Suggested Slots Section (always visible to allow adding more activities)
+                    let currentPlan = selectedDay == .today ? planManager.todayPlan : planManager.tomorrowPlan
+                    // Get the primary suggestion (first slot) and walkable meetings separately
+                    // Filter out past times for today and already scheduled slots
+                    let now = Date()
+                    let isToday = selectedDay == .today
 
-                        SuggestedSlotsSection(
-                            suggestedWalk: primaryWalkSlot,
-                            suggestedWorkout: currentPlan?.workoutSlot,
-                            walkableMeetings: walkableMeetings,
-                            allWalkSlots: freeTimeSlots,
-                            hasWorkoutGoal: userPreferences.hasWorkoutGoal,
-                            isToday: selectedDay == .today,
-                            onScheduleSlot: { walkSlot, workoutSlot, activityType in
-                                if activityType == .walk, let slot = walkSlot {
-                                    slotToSchedule = slot
-                                    showScheduleWalk = true
-                                } else if activityType == .workout, let slot = workoutSlot {
-                                    workoutToSchedule = slot
-                                    showScheduleWorkout = true
-                                }
-                            },
-                            onCustomTime: { activityType in
-                                customTimeActivityType = activityType
-                                showCustomTimeSheet = true
-                            }
-                        )
+                    // Get scheduled activity times to filter them out from suggestions
+                    // Include both ScheduledActivity times and PlannedActivity (calendar) times
+                    let scheduledTimes = scheduledForDay.compactMap { activity -> Date? in
+                        activity.getTimeRange(for: currentDate)?.start
                     }
+                    let calendarTimes = calendarActivitiesForDay.map { $0.startTime }
+                    let allBookedTimes = scheduledTimes + calendarTimes
+
+                    // Helper to check if a slot overlaps with any scheduled or calendar activity
+                    let isSlotScheduled: (Date) -> Bool = { slotTime in
+                        allBookedTimes.contains { bookedTime in
+                            abs(slotTime.timeIntervalSince(bookedTime)) < 60 * 30 // Within 30 min
+                        }
+                    }
+
+                    // Filter walkable meetings: future only, not already scheduled
+                    let walkableMeetings = (currentPlan?.stepSlots.filter { $0.slotType == .walkableMeeting } ?? [])
+                        .filter { !isToday || $0.startTime > now }
+                        .filter { !isSlotScheduled($0.startTime) }
+
+                    // Filter free time slots: future only, not already scheduled
+                    let freeTimeSlots = (currentPlan?.stepSlots.filter { $0.slotType == .freeTime } ?? [])
+                        .filter { !isToday || $0.startTime > now }
+                        .filter { !isSlotScheduled($0.startTime) }
+
+                    // Consolidate slots at the same time
+                    let consolidatedWalkSlots = consolidateSlots(freeTimeSlots)
+                    let consolidatedMeetingSlots = consolidateSlots(walkableMeetings)
+                    let primaryWalkSlot = consolidatedWalkSlots.first ?? consolidatedMeetingSlots.first
+
+                    // Filter workout slot for future time and not already scheduled
+                    let workoutSlot = currentPlan?.workoutSlot
+                    let futureWorkoutSlot = workoutSlot.flatMap { slot -> WorkoutSlot? in
+                        // Skip if in the past (for today)
+                        guard !isToday || slot.startTime > now else { return nil }
+                        // Skip if already scheduled
+                        guard !isSlotScheduled(slot.startTime) else { return nil }
+                        return slot
+                    }
+
+                    SuggestedSlotsSection(
+                        suggestedWalk: primaryWalkSlot,
+                        suggestedWorkout: futureWorkoutSlot,
+                        walkableMeetings: consolidatedMeetingSlots,
+                        allWalkSlots: consolidatedWalkSlots,
+                        hasWorkoutGoal: userPreferences.hasWorkoutGoal,
+                        isToday: isToday,
+                        onScheduleSlot: { walkSlot, workoutSlot, activityType in
+                            if activityType == .walk, let slot = walkSlot {
+                                slotToSchedule = slot
+                                showScheduleWalk = true
+                            } else if activityType == .workout, let slot = workoutSlot {
+                                workoutToSchedule = slot
+                                showScheduleWorkout = true
+                            }
+                        },
+                        onScheduleConsolidatedWalks: { ranges in
+                            // Directly schedule each consolidated walk range without showing a sheet
+                            for range in ranges {
+                                let duration = Int(range.end.timeIntervalSince(range.start) / 60)
+                                let activity = ScheduledActivity(
+                                    activityType: .walk,
+                                    title: "Walk",
+                                    startTime: range.start,
+                                    duration: duration,
+                                    recurrence: .once
+                                )
+                                scheduledActivityManager.addScheduledActivity(activity)
+                            }
+                            // Provide haptic feedback
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        },
+                        onCustomTime: { activityType in
+                            customTimeActivityType = activityType
+                            showCustomTimeSheet = true
+                        }
+                    )
 
                     // Movement Plan Section (walkable meetings and free time slots)
                     if selectedDay == .today {
@@ -164,7 +224,7 @@ struct HomeView: View {
                         suggestedDuration: slot.duration,
                         onScheduled: {
                             slotToSchedule = nil
-                            Task { await planManager.generatePlans() }
+                            // Don't regenerate plans - keep slots visible for user to add more
                         }
                     )
                 }
@@ -180,7 +240,7 @@ struct HomeView: View {
                         workoutType: slot.workoutType,
                         onScheduled: {
                             workoutToSchedule = nil
-                            Task { await planManager.generatePlans() }
+                            // Don't regenerate plans - keep slots visible for user to add more
                         }
                     )
                 }
@@ -190,7 +250,7 @@ struct HomeView: View {
                     activityType: customTimeActivityType,
                     date: selectedDay == .today ? Date() : Calendar.current.date(byAdding: .day, value: 1, to: Date())!,
                     onScheduled: {
-                        Task { await planManager.generatePlans() }
+                        // Don't regenerate plans - keep slots visible for user to add more
                     }
                 )
             }
@@ -205,6 +265,12 @@ struct HomeView: View {
                         Task { await planManager.generatePlans() }
                     }
                 )
+            }
+            .onChange(of: resetToTodayTrigger) { _, _ in
+                // Reset to Today tab when bottom tab bar "Today" is tapped
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    selectedDay = .today
+                }
             }
         }
     }
@@ -224,6 +290,41 @@ struct HomeView: View {
         await planManager.generatePlans()
         await insightsManager.analyzePatterns()
         isRefreshing = false
+    }
+
+    /// Consolidates slots that start at the same time into a single slot
+    /// by picking the one with the most steps/longest duration
+    private func consolidateSlots(_ slots: [StepSlot]) -> [StepSlot] {
+        guard !slots.isEmpty else { return [] }
+
+        // Group slots by their start time (rounded to the nearest 5 minutes)
+        let calendar = Calendar.current
+        var groupedSlots: [Date: [StepSlot]] = [:]
+
+        for slot in slots {
+            // Round to nearest 5 minutes for grouping
+            let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: slot.startTime)
+            let minute = components.minute ?? 0
+            let roundedMinute = (minute / 5) * 5
+            var roundedComponents = components
+            roundedComponents.minute = roundedMinute
+            let roundedTime = calendar.date(from: roundedComponents) ?? slot.startTime
+
+            if groupedSlots[roundedTime] == nil {
+                groupedSlots[roundedTime] = []
+            }
+            groupedSlots[roundedTime]?.append(slot)
+        }
+
+        // For each group, pick the best slot (most steps or longest duration)
+        var consolidatedSlots: [StepSlot] = []
+        for (_, slotsAtTime) in groupedSlots {
+            if let bestSlot = slotsAtTime.max(by: { $0.targetSteps < $1.targetSteps }) {
+                consolidatedSlots.append(bestSlot)
+            }
+        }
+
+        return consolidatedSlots.sorted { $0.startTime < $1.startTime }
     }
 }
 
@@ -563,7 +664,7 @@ struct DaySelector: View {
     var body: some View {
         HStack(spacing: 0) {
             Button {
-                withAnimation { selectedDay = .today }
+                withAnimation(.easeInOut(duration: 0.2)) { selectedDay = .today }
             } label: {
                 Text("Today")
                     .font(.subheadline)
@@ -573,10 +674,12 @@ struct DaySelector: View {
                     .padding(.vertical, 10)
                     .background(selectedDay == .today ? Color.blue : Color.clear)
                     .cornerRadius(8)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
             Button {
-                withAnimation { selectedDay = .tomorrow }
+                withAnimation(.easeInOut(duration: 0.2)) { selectedDay = .tomorrow }
             } label: {
                 Text("Tomorrow")
                     .font(.subheadline)
@@ -586,7 +689,9 @@ struct DaySelector: View {
                     .padding(.vertical, 10)
                     .background(selectedDay == .tomorrow ? Color.blue : Color.clear)
                     .cornerRadius(8)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
         }
         .padding(4)
         .background(Color(.secondarySystemBackground))
@@ -804,7 +909,7 @@ struct MovementPlanSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(plan.isToday ? "Available Slots" : "Tomorrow's Slots")
+            Text(plan.isToday ? "Walk Slots" : "Tomorrow's Walk Slots")
                 .font(.headline)
 
             // Step Slots (walkable meetings and free time)
@@ -1111,9 +1216,15 @@ struct CustomTimeSlotSheet: View {
 
 struct ScheduledActivitiesSection: View {
     let activities: [ScheduledActivity]
+    var calendarActivities: [PlannedActivity] = []
     let date: Date
     var onViewAll: () -> Void
     @ObservedObject var scheduledActivityManager = ScheduledActivityManager.shared
+    @ObservedObject var activityStore = ActivityStore.shared
+    @State private var activityToEdit: ScheduledActivity?
+    @State private var calendarActivityToEdit: PlannedActivity?
+    @State private var showEditSheet = false
+    @State private var showCalendarActivitySheet = false
 
     private var isToday: Bool {
         Calendar.current.isDateInToday(date)
@@ -1125,17 +1236,69 @@ struct ScheduledActivitiesSection: View {
         return f
     }
 
+    // Combined and sorted list of all activities for the day
+    private var allActivitiesSorted: [(type: ActivityItemType, scheduledActivity: ScheduledActivity?, calendarActivity: PlannedActivity?, startTime: Date)] {
+        var combined: [(type: ActivityItemType, scheduledActivity: ScheduledActivity?, calendarActivity: PlannedActivity?, startTime: Date)] = []
+
+        // Add scheduled activities
+        for activity in activities {
+            if let timeRange = activity.getTimeRange(for: date) {
+                combined.append((type: .scheduled, scheduledActivity: activity, calendarActivity: nil, startTime: timeRange.start))
+            }
+        }
+
+        // Add calendar/planned activities (avoiding duplicates based on time and type)
+        for calActivity in calendarActivities {
+            // Check if this activity doesn't overlap with an existing scheduled activity
+            let isDuplicate = activities.contains { scheduled in
+                guard let timeRange = scheduled.getTimeRange(for: date) else { return false }
+                // Consider duplicate if same type and overlapping time
+                return scheduled.activityType == calActivity.activityType &&
+                    abs(timeRange.start.timeIntervalSince(calActivity.startTime)) < 60 * 15 // Within 15 min
+            }
+            if !isDuplicate {
+                combined.append((type: .calendar, scheduledActivity: nil, calendarActivity: calActivity, startTime: calActivity.startTime))
+            }
+        }
+
+        return combined.sorted { $0.startTime < $1.startTime }
+    }
+
+    private var totalCount: Int {
+        allActivitiesSorted.count
+    }
+
+    private var completedCount: Int {
+        var count = 0
+        for item in allActivitiesSorted {
+            if item.type == .scheduled, let activity = item.scheduledActivity {
+                if scheduledActivityManager.isCompleted(activity: activity, for: date) {
+                    count += 1
+                }
+            } else if item.type == .calendar, let activity = item.calendarActivity {
+                if activity.isCompleted {
+                    count += 1
+                }
+            }
+        }
+        return count
+    }
+
+    enum ActivityItemType {
+        case scheduled
+        case calendar
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(isToday ? "Your Commitments" : "Your Schedule")
+                Text("Your Schedule")
                     .font(.headline)
 
                 Spacer()
 
-                if isToday {
-                    let completed = activities.filter { scheduledActivityManager.isCompleted(activity: $0, for: date) }.count
-                    Text("\(completed)/\(activities.count)")
+                if isToday && totalCount > 0 {
+                    Text("\(completedCount)/\(totalCount)")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -1149,8 +1312,9 @@ struct ScheduledActivitiesSection: View {
                 }
             }
 
-            ForEach(activities) { activity in
-                if let timeRange = activity.getTimeRange(for: date) {
+            ForEach(Array(allActivitiesSorted.enumerated()), id: \.offset) { index, item in
+                if item.type == .scheduled, let activity = item.scheduledActivity,
+                   let timeRange = activity.getTimeRange(for: date) {
                     CommittedActivityRow(
                         activity: activity,
                         timeRange: timeRange,
@@ -1160,8 +1324,199 @@ struct ScheduledActivitiesSection: View {
                             withAnimation(.spring(response: 0.3)) {
                                 scheduledActivityManager.toggleCompletion(activity: activity, for: date)
                             }
+                        },
+                        onTap: {
+                            activityToEdit = activity
+                            showEditSheet = true
+                        },
+                        onDelete: {
+                            withAnimation(.spring(response: 0.3)) {
+                                scheduledActivityManager.deleteScheduledActivity(activity)
+                            }
                         }
                     )
+                } else if item.type == .calendar, let calActivity = item.calendarActivity {
+                    CalendarActivityRow(
+                        activity: calActivity,
+                        isToday: isToday,
+                        onToggle: {
+                            withAnimation(.spring(response: 0.3)) {
+                                var updated = calActivity
+                                if calActivity.isCompleted {
+                                    updated.isCompleted = false
+                                } else {
+                                    updated.markCompleted()
+                                }
+                                activityStore.updateActivity(updated)
+                            }
+                        },
+                        onTap: {
+                            calendarActivityToEdit = calActivity
+                            showCalendarActivitySheet = true
+                        },
+                        onDelete: {
+                            withAnimation(.spring(response: 0.3)) {
+                                activityStore.deleteActivity(calActivity)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+        .sheet(isPresented: $showEditSheet) {
+            if let activity = activityToEdit {
+                EditScheduledActivitySheet(activity: activity)
+            }
+        }
+        .sheet(isPresented: $showCalendarActivitySheet) {
+            if let activity = calendarActivityToEdit {
+                ActivityDetailSheet(activity: activity)
+                    .environmentObject(activityStore)
+            }
+        }
+    }
+}
+
+// MARK: - Calendar Activity Row (for PlannedActivity from calendar)
+
+struct CalendarActivityRow: View {
+    let activity: PlannedActivity
+    let isToday: Bool
+    var onToggle: () -> Void
+    var onTap: () -> Void
+    var onDelete: () -> Void
+
+    @State private var offset: CGFloat = 0
+    @State private var showDeleteButton = false
+
+    private let deleteThreshold: CGFloat = -80
+
+    private var timeFormatter: DateFormatter {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        return f
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            // Delete button background
+            HStack {
+                Spacer()
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        onDelete()
+                    }
+                } label: {
+                    Image(systemName: "trash.fill")
+                        .foregroundColor(.white)
+                        .frame(width: 60, height: 60)
+                }
+                .background(Color.red)
+                .cornerRadius(12)
+            }
+            .opacity(showDeleteButton ? 1 : 0)
+
+            // Main content
+            HStack(spacing: 12) {
+                // Checkbox for today
+                if isToday {
+                    Button {
+                        onToggle()
+                    } label: {
+                        Image(systemName: activity.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .font(.title2)
+                            .foregroundColor(activity.isCompleted ? .green : .gray)
+                    }
+                }
+
+                Image(systemName: activity.icon)
+                    .font(.title3)
+                    .foregroundColor(activity.isCompleted ? .gray : activity.color)
+                    .frame(width: 36, height: 36)
+                    .background((activity.isCompleted ? Color.gray : activity.color).opacity(0.1))
+                    .cornerRadius(8)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(activity.title)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .strikethrough(activity.isCompleted, color: .gray)
+                            .foregroundColor(activity.isCompleted ? .secondary : .primary)
+
+                        // Calendar badge to distinguish from scheduled activities
+                        Image(systemName: "calendar")
+                            .font(.caption2)
+                            .foregroundColor(.blue)
+                    }
+
+                    HStack(spacing: 6) {
+                        Text("\(timeFormatter.string(from: activity.startTime)) - \(timeFormatter.string(from: activity.endTime))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        if activity.repeatOption != .never {
+                            Text("•")
+                                .foregroundColor(.secondary)
+                            Image(systemName: "repeat")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                if activity.isCompleted && isToday {
+                    Text("Done")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.green)
+                } else {
+                    Text("\(activity.duration) min")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(12)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(12)
+            .opacity(activity.isCompleted ? 0.8 : 1.0)
+            .offset(x: offset)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if value.translation.width < 0 {
+                            offset = value.translation.width
+                            showDeleteButton = offset < deleteThreshold
+                        }
+                    }
+                    .onEnded { value in
+                        withAnimation(.spring(response: 0.3)) {
+                            if value.translation.width < deleteThreshold * 1.5 {
+                                // Full swipe - delete
+                                onDelete()
+                            } else if value.translation.width < deleteThreshold {
+                                // Partial swipe - show delete button
+                                offset = deleteThreshold
+                                showDeleteButton = true
+                            } else {
+                                // Reset
+                                offset = 0
+                                showDeleteButton = false
+                            }
+                        }
+                    }
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if showDeleteButton {
+                    withAnimation(.spring(response: 0.3)) {
+                        offset = 0
+                        showDeleteButton = false
+                    }
+                } else {
+                    onTap()
                 }
             }
         }
@@ -1176,6 +1531,13 @@ struct CommittedActivityRow: View {
     let isCompleted: Bool
     let isToday: Bool
     var onToggle: () -> Void
+    var onTap: () -> Void
+    var onDelete: () -> Void
+
+    @State private var offset: CGFloat = 0
+    @State private var showDeleteButton = false
+
+    private let deleteThreshold: CGFloat = -80
 
     private var timeFormatter: DateFormatter {
         let f = DateFormatter()
@@ -1200,64 +1562,121 @@ struct CommittedActivityRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Checkbox for today
-            if isToday {
+        ZStack(alignment: .trailing) {
+            // Delete button background
+            HStack {
+                Spacer()
                 Button {
-                    onToggle()
+                    withAnimation(.spring(response: 0.3)) {
+                        onDelete()
+                    }
                 } label: {
-                    Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
-                        .font(.title2)
-                        .foregroundColor(isCompleted ? .green : .gray)
+                    Image(systemName: "trash.fill")
+                        .foregroundColor(.white)
+                        .frame(width: 60, height: 60)
                 }
+                .background(Color.red)
+                .cornerRadius(12)
             }
+            .opacity(showDeleteButton ? 1 : 0)
 
-            Image(systemName: displayIcon)
-                .font(.title3)
-                .foregroundColor(isCompleted ? .gray : activity.color)
-                .frame(width: 36, height: 36)
-                .background((isCompleted ? Color.gray : activity.color).opacity(0.1))
-                .cornerRadius(8)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(displayTitle)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .strikethrough(isCompleted, color: .gray)
-                    .foregroundColor(isCompleted ? .secondary : .primary)
-
-                HStack(spacing: 6) {
-                    Text("\(timeFormatter.string(from: timeRange.start)) - \(timeFormatter.string(from: timeRange.end))")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
-                    if activity.recurrence != .once {
-                        Text("•")
-                            .foregroundColor(.secondary)
-                        Image(systemName: "repeat")
-                            .font(.caption2)
-                            .foregroundColor(.blue)
+            // Main content
+            HStack(spacing: 12) {
+                // Checkbox for today
+                if isToday {
+                    Button {
+                        onToggle()
+                    } label: {
+                        Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                            .font(.title2)
+                            .foregroundColor(isCompleted ? .green : .gray)
                     }
                 }
+
+                Image(systemName: displayIcon)
+                    .font(.title3)
+                    .foregroundColor(isCompleted ? .gray : activity.color)
+                    .frame(width: 36, height: 36)
+                    .background((isCompleted ? Color.gray : activity.color).opacity(0.1))
+                    .cornerRadius(8)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(displayTitle)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .strikethrough(isCompleted, color: .gray)
+                        .foregroundColor(isCompleted ? .secondary : .primary)
+
+                    HStack(spacing: 6) {
+                        Text("\(timeFormatter.string(from: timeRange.start)) - \(timeFormatter.string(from: timeRange.end))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        if activity.recurrence != .once {
+                            Text("•")
+                                .foregroundColor(.secondary)
+                            Image(systemName: "repeat")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                if isCompleted && isToday {
+                    Text("Done")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.green)
+                } else {
+                    Text("\(activity.duration) min")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
-
-            Spacer()
-
-            if isCompleted && isToday {
-                Text("Done")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.green)
-            } else {
-                Text("\(activity.duration) min")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            .padding(12)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(12)
+            .opacity(isCompleted ? 0.8 : 1.0)
+            .offset(x: offset)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if value.translation.width < 0 {
+                            offset = value.translation.width
+                            showDeleteButton = offset < deleteThreshold
+                        }
+                    }
+                    .onEnded { value in
+                        withAnimation(.spring(response: 0.3)) {
+                            if value.translation.width < deleteThreshold * 1.5 {
+                                // Full swipe - delete
+                                onDelete()
+                            } else if value.translation.width < deleteThreshold {
+                                // Partial swipe - show delete button
+                                offset = deleteThreshold
+                                showDeleteButton = true
+                            } else {
+                                // Reset
+                                offset = 0
+                                showDeleteButton = false
+                            }
+                        }
+                    }
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if showDeleteButton {
+                    withAnimation(.spring(response: 0.3)) {
+                        offset = 0
+                        showDeleteButton = false
+                    }
+                } else {
+                    onTap()
+                }
             }
         }
-        .padding(12)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
-        .opacity(isCompleted ? 0.8 : 1.0)
     }
 }
 
@@ -1271,6 +1690,7 @@ struct SuggestedSlotsSection: View {
     let hasWorkoutGoal: Bool
     var isToday: Bool = true
     var onScheduleSlot: (StepSlot?, WorkoutSlot?, ActivityType) -> Void
+    var onScheduleConsolidatedWalks: ([(start: Date, end: Date, steps: Int)]) -> Void // Array of consolidated ranges
     var onCustomTime: (ActivityType) -> Void
     @StateObject private var scheduledActivityManager = ScheduledActivityManager.shared
     @EnvironmentObject var userPreferences: UserPreferences
@@ -1286,8 +1706,74 @@ struct SuggestedSlotsSection: View {
     }
 
     private var hasWorkoutHistory: Bool {
-        let patterns = scheduledActivityManager.getTimeSuggestions(for: .workout, on: Date())
+        let patterns = scheduledActivityManager.getTimeSuggestions(for: .workout, on: currentDate)
         return !patterns.isEmpty
+    }
+
+    private var workoutHistoryMessage: String? {
+        scheduledActivityManager.getWorkoutHistoryMessage(for: currentDate)
+    }
+
+    private var currentDate: Date {
+        isToday ? Date() : Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+    }
+
+    // Get consolidated time ranges from selected walk slots (groups overlapping/adjacent slots)
+    private var consolidatedWalkTimeRanges: [(start: Date, end: Date, steps: Int)] {
+        guard !selectedWalkSlots.isEmpty else { return [] }
+
+        let allAvailableSlots = allWalkSlots + walkableMeetings
+        let selectedSlots = allAvailableSlots.filter { selectedWalkSlots.contains($0.id) }
+
+        guard !selectedSlots.isEmpty else { return [] }
+
+        // Sort slots by start time
+        let sortedSlots = selectedSlots.sorted { $0.startTime < $1.startTime }
+
+        // Group overlapping or adjacent slots (within 30 min gap)
+        var groups: [[(start: Date, end: Date, steps: Int)]] = []
+        let maxGap: TimeInterval = 30 * 60 // 30 minutes
+
+        for slot in sortedSlots {
+            let slotRange = (start: slot.startTime, end: slot.endTime, steps: slot.targetSteps)
+
+            if groups.isEmpty {
+                groups.append([slotRange])
+            } else {
+                // Check if this slot overlaps or is adjacent to the last group
+                let lastGroupEnd = groups[groups.count - 1].map { $0.end }.max() ?? Date.distantPast
+
+                if slot.startTime.timeIntervalSince(lastGroupEnd) <= maxGap {
+                    // Overlaps or adjacent - add to current group
+                    groups[groups.count - 1].append(slotRange)
+                } else {
+                    // Gap too large - start new group
+                    groups.append([slotRange])
+                }
+            }
+        }
+
+        // Consolidate each group into a single range
+        return groups.map { group in
+            let start = group.map { $0.start }.min() ?? Date()
+            let end = group.map { $0.end }.max() ?? Date()
+            let steps = group.reduce(0) { $0 + $1.steps }
+            return (start: start, end: end, steps: steps)
+        }
+    }
+
+    // Format the consolidated time ranges for display
+    private var consolidatedTimeRangesFormatted: String {
+        let ranges = consolidatedWalkTimeRanges
+        guard !ranges.isEmpty else { return "" }
+
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+
+        return ranges.map { range in
+            let duration = Int(range.end.timeIntervalSince(range.start) / 60)
+            return "\(formatter.string(from: range.start)) - \(formatter.string(from: range.end)) (\(duration) min)"
+        }.joined(separator: ", ")
     }
 
     private var walkPreferenceLabel: String {
@@ -1308,9 +1794,10 @@ struct SuggestedSlotsSection: View {
         }
     }
 
-    // Calculate total estimated steps from selected walk slots
+    // Calculate total estimated steps from selected walk slots (including walkable meetings)
     private var totalSelectedSteps: Int {
-        allWalkSlots
+        let allAvailableSlots = allWalkSlots + walkableMeetings
+        return allAvailableSlots
             .filter { selectedWalkSlots.contains($0.id) }
             .reduce(0) { $0 + $1.targetSteps }
     }
@@ -1324,7 +1811,7 @@ struct SuggestedSlotsSection: View {
         VStack(alignment: .leading, spacing: 16) {
             // Header with selection summary
             HStack {
-                Text(isToday ? "Suggested Slots" : "Tomorrow's Slots")
+                Text("Suggested Slots")
                     .font(.headline)
 
                 Spacer()
@@ -1446,6 +1933,7 @@ struct SuggestedSlotsSection: View {
                             isSelected: selectedWorkoutSlot?.id == workout.id,
                             isBestTime: true,
                             hasHistory: hasWorkoutHistory,
+                            historyMessage: workoutHistoryMessage,
                             onToggle: {
                                 if selectedWorkoutSlot?.id == workout.id {
                                     selectedWorkoutSlot = nil
@@ -1476,33 +1964,80 @@ struct SuggestedSlotsSection: View {
 
             // Schedule selected button (if multiple selections)
             if hasSelections {
-                Button {
-                    // Schedule all selected slots
-                    for slotId in selectedWalkSlots {
-                        if let slot = allWalkSlots.first(where: { $0.id == slotId }) ?? walkableMeetings.first(where: { $0.id == slotId }) {
-                            onScheduleSlot(slot, nil, .walk)
+                VStack(spacing: 8) {
+                    // Show consolidated time ranges preview (may be multiple groups)
+                    let ranges = consolidatedWalkTimeRanges
+                    if !ranges.isEmpty {
+                        ForEach(Array(ranges.enumerated()), id: \.offset) { index, range in
+                            let formatter = DateFormatter()
+                            let _ = formatter.timeStyle = .short
+                            let duration = Int(range.end.timeIntervalSince(range.start) / 60)
+                            HStack {
+                                Image(systemName: "figure.walk")
+                                    .foregroundColor(.green)
+                                Text("Walk: \(formatter.string(from: range.start)) - \(formatter.string(from: range.end)) (\(duration) min)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text("\(range.steps.formatted()) steps")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.green)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.green.opacity(0.1))
+                            .cornerRadius(8)
                         }
                     }
+
                     if let workout = selectedWorkoutSlot {
-                        onScheduleSlot(nil, workout, .workout)
+                        HStack {
+                            Image(systemName: "figure.strengthtraining.traditional")
+                                .foregroundColor(.orange)
+                            Text("Workout: \(workout.timeRangeFormatted)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("\(workout.duration) min")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.orange)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(8)
                     }
-                    // Clear selections after scheduling
-                    selectedWalkSlots.removeAll()
-                    selectedWorkoutSlot = nil
-                } label: {
-                    HStack {
-                        Image(systemName: "calendar.badge.plus")
-                        Text("Schedule Selected (\(selectedWalkSlots.count + (selectedWorkoutSlot != nil ? 1 : 0)))")
-                        Spacer()
-                        Text("\(totalSelectedSteps.formatted()) steps")
-                            .fontWeight(.medium)
+
+                    Button {
+                        // Schedule all consolidated walk slots (may be multiple groups)
+                        let ranges = consolidatedWalkTimeRanges
+                        if !ranges.isEmpty {
+                            onScheduleConsolidatedWalks(ranges)
+                        }
+                        // Schedule workout if selected
+                        if let workout = selectedWorkoutSlot {
+                            onScheduleSlot(nil, workout, .workout)
+                        }
+                        // Clear selections after scheduling
+                        selectedWalkSlots.removeAll()
+                        selectedWorkoutSlot = nil
+                    } label: {
+                        HStack {
+                            Image(systemName: "calendar.badge.plus")
+                            Text("Add to Your Schedule")
+                            Spacer()
+                            Text("\(totalSelectedSteps.formatted()) steps")
+                                .fontWeight(.medium)
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(.white)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .background(Color.blue)
+                        .cornerRadius(12)
                     }
-                    .font(.subheadline)
-                    .foregroundColor(.white)
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 16)
-                    .background(Color.blue)
-                    .cornerRadius(12)
                 }
                 .padding(.top, 8)
             }
@@ -1604,72 +2139,89 @@ struct SelectableWorkoutCard: View {
     let isSelected: Bool
     let isBestTime: Bool
     let hasHistory: Bool
+    var historyMessage: String?
     var onToggle: () -> Void
     var onSchedule: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Selection checkbox
-            Button {
-                onToggle()
-            } label: {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundColor(isSelected ? .orange : .gray)
-            }
-
-            // Workout icon
-            Image(systemName: "figure.strengthtraining.traditional")
-                .font(.caption)
-                .foregroundColor(.orange)
-                .frame(width: 28, height: 28)
-                .background(Color.orange.opacity(0.1))
-                .cornerRadius(6)
-
-            // Slot info
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text("Workout")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-
-                    if isBestTime {
-                        Text(hasHistory ? "Your Best" : "Best")
-                            .font(.caption2)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Color.orange)
-                            .cornerRadius(4)
-                    }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                // Selection checkbox
+                Button {
+                    onToggle()
+                } label: {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundColor(isSelected ? .orange : .gray)
                 }
 
-                Text(slot.timeRangeFormatted)
+                // Workout icon
+                Image(systemName: "figure.strengthtraining.traditional")
                     .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            Spacer()
-
-            // Duration
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(slot.duration)")
-                    .font(.caption)
-                    .fontWeight(.medium)
                     .foregroundColor(.orange)
-                Text("min")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(6)
+
+                // Slot info
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("Workout")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+
+                        if isBestTime && hasHistory {
+                            Text("Same Time")
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color.orange)
+                                .cornerRadius(4)
+                        }
+                    }
+
+                    Text(slot.timeRangeFormatted)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                // Duration
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(slot.duration)")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.orange)
+                    Text("min")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+
+                // Quick schedule button
+                Button {
+                    onSchedule()
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(.blue)
+                }
             }
 
-            // Quick schedule button
-            Button {
-                onSchedule()
-            } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title3)
-                    .foregroundColor(.blue)
+            // History message
+            if let message = historyMessage {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                    Text(message)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .italic()
+                }
+                .padding(.leading, 44)
             }
         }
         .padding(10)

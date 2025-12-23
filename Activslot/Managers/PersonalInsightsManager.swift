@@ -327,7 +327,9 @@ class PersonalInsightsManager: ObservableObject {
         // Check calendar for today
         let calendarManager = CalendarManager.shared
         let todayEvents = (try? await calendarManager.fetchEvents(for: Date())) ?? []
-        let meetingMinutes = todayEvents.reduce(0) { $0 + $1.duration }
+        // Filter out all-day events and out-of-office events - only count real meetings
+        let realMeetings = todayEvents.filter { $0.isRealMeeting }
+        let meetingMinutes = realMeetings.reduce(0) { $0 + $1.duration }
 
         // If heavy meeting day, reduce confidence
         if meetingMinutes > 360 { // > 6 hours
@@ -352,14 +354,15 @@ class PersonalInsightsManager: ObservableObject {
         }
 
         // Check walkable meetings - fewer meetings is actually good for dedicated walks
-        let walkableMeetings = todayEvents.filter { $0.isWalkable }
+        // Use realMeetings to exclude all-day/OOO events from this calculation too
+        let walkableMeetings = realMeetings.filter { $0.isWalkable }
         let walkableSteps = walkableMeetings.reduce(0) { $0 + $1.estimatedSteps }
 
-        // Only flag as a blocker if we have many meetings but none are walkable
-        if todayEvents.count > 5 && walkableMeetings.isEmpty {
+        // Only flag as a blocker if we have many real meetings but none are walkable
+        if realMeetings.count > 5 && walkableMeetings.isEmpty {
             blockers.append("Busy day with no walkable meetings")
             confidence -= 0.2
-        } else if todayEvents.count <= 3 {
+        } else if realMeetings.count <= 3 {
             // Few meetings means more free time for dedicated walks - this is positive!
             opportunities.append("Free calendar - schedule dedicated walk breaks")
         }

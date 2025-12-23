@@ -1,13 +1,5 @@
 import SwiftUI
 
-// MARK: - Calendar View Mode
-
-enum CalendarViewMode: String, CaseIterable {
-    case day = "Day"
-    case week = "Week"
-    case month = "Month"
-}
-
 // MARK: - Main Calendar View
 
 struct ActivslotCalendarView: View {
@@ -15,8 +7,10 @@ struct ActivslotCalendarView: View {
     @StateObject private var scheduledActivityManager = ScheduledActivityManager.shared
     @EnvironmentObject var calendarManager: CalendarManager
 
+    // Trigger to reset to today when calendar tab is tapped
+    var resetToTodayTrigger: Int = 0
+
     @State private var selectedDate = Date()
-    @State private var viewMode: CalendarViewMode = .day
     @State private var showAddActivity = false
     @State private var selectedActivity: PlannedActivity?
     @State private var showActivityDetail = false
@@ -62,54 +56,26 @@ struct ActivslotCalendarView: View {
                     onSyncTap: { showSyncSheet = true }
                 )
 
-                // View Mode Picker
-                Picker("View", selection: $viewMode) {
-                    ForEach(CalendarViewMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
+                // Day Calendar View (only view mode)
+                DayCalendarView(
+                    selectedDate: $selectedDate,
+                    activities: allActivitiesForDate,
+                    externalEvents: externalEvents,
+                    onActivityTap: { activity in
+                        selectedActivity = activity
+                        showActivityDetail = true
+                    },
+                    onAddTap: { time in
+                        selectedDate = time
+                        showAddActivity = true
+                    },
+                    onActivityTimeChanged: { activity, newTime in
+                        updateActivityTime(activity, to: newTime)
+                    },
+                    onActivityDurationChanged: { activity, newDuration in
+                        updateActivityDuration(activity, to: newDuration)
                     }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.top, 8)
-
-                // Calendar Content
-                switch viewMode {
-                case .day:
-                    DayCalendarView(
-                        selectedDate: $selectedDate,
-                        activities: allActivitiesForDate,
-                        externalEvents: externalEvents,
-                        onActivityTap: { activity in
-                            selectedActivity = activity
-                            showActivityDetail = true
-                        },
-                        onAddTap: { time in
-                            selectedDate = time
-                            showAddActivity = true
-                        },
-                        onActivityTimeChanged: { activity, newTime in
-                            updateActivityTime(activity, to: newTime)
-                        }
-                    )
-                case .week:
-                    WeekCalendarView(
-                        selectedDate: $selectedDate,
-                        activities: activityStore.activities,
-                        onDayTap: { date in
-                            selectedDate = date
-                            viewMode = .day
-                        }
-                    )
-                case .month:
-                    MonthCalendarView(
-                        selectedDate: $selectedDate,
-                        activities: activityStore.activities,
-                        onDayTap: { date in
-                            selectedDate = date
-                            viewMode = .day
-                        }
-                    )
-                }
+                )
             }
             .navigationTitle("Calendar")
             .navigationBarTitleDisplayMode(.inline)
@@ -122,10 +88,37 @@ struct ActivslotCalendarView: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showAddActivity = true
-                    } label: {
-                        Image(systemName: "plus")
+                    HStack(spacing: 12) {
+                        // Quick add Walk (1 hour)
+                        Button {
+                            quickAddActivity(type: .walk)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "figure.walk")
+                                Text("+")
+                                    .font(.caption2)
+                            }
+                            .foregroundColor(.green)
+                        }
+
+                        // Quick add Workout (1 hour)
+                        Button {
+                            quickAddActivity(type: .workout)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "figure.strengthtraining.traditional")
+                                Text("+")
+                                    .font(.caption2)
+                            }
+                            .foregroundColor(.orange)
+                        }
+
+                        // Full add sheet
+                        Button {
+                            showAddActivity = true
+                        } label: {
+                            Image(systemName: "plus.circle")
+                        }
                     }
                 }
             }
@@ -135,7 +128,7 @@ struct ActivslotCalendarView: View {
             }
             .sheet(isPresented: $showActivityDetail) {
                 if let activity = selectedActivity {
-                    ActivityDetailSheet(activity: activity)
+                    ActivityDetailSheet(activity: activity, startInEditMode: true)
                         .environmentObject(activityStore)
                 }
             }
@@ -157,6 +150,10 @@ struct ActivslotCalendarView: View {
                 Task {
                     await loadExternalEvents()
                 }
+            }
+            .onChange(of: resetToTodayTrigger) { _, _ in
+                // Reset to today when calendar tab is tapped
+                selectedDate = Date()
             }
         }
     }
@@ -208,6 +205,40 @@ struct ActivslotCalendarView: View {
         }
     }
 
+    private func quickAddActivity(type: ActivityType) {
+        // Find the next available hour (current hour + 1, rounded up)
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day, .hour], from: selectedDate)
+
+        // If selected date is today, start from current time
+        if calendar.isDateInToday(selectedDate) {
+            let currentHour = calendar.component(.hour, from: Date())
+            components.hour = min(currentHour + 1, 23)
+        } else {
+            // Default to 9 AM for future dates
+            components.hour = 9
+        }
+        components.minute = 0
+
+        guard let startTime = calendar.date(from: components) else { return }
+
+        let title = type == .walk ? "Walk" : "Workout"
+        let duration = 60 // 1 hour default
+
+        // Create and add the activity directly without opening edit sheet
+        let activity = PlannedActivity(
+            title: title,
+            activityType: type,
+            startTime: startTime,
+            duration: duration
+        )
+
+        activityStore.addActivity(activity)
+
+        // Provide haptic feedback to confirm addition
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
     private func loadExternalEvents() async {
         if let events = try? await calendarManager.fetchEvents(for: selectedDate) {
             await MainActor.run {
@@ -236,6 +267,27 @@ struct ActivslotCalendarView: View {
             activityStore.updateActivityTime(activity, to: newTime)
         }
     }
+
+    private func updateActivityDuration(_ activity: PlannedActivity, to newDuration: Int) {
+        // Find and update the scheduled activity
+        if let scheduledActivity = scheduledActivityManager.activities(for: selectedDate)
+            .first(where: { scheduled in
+                // Match by activity type and approximate time
+                guard scheduled.activityType == activity.activityType,
+                      let timeRange = scheduled.getTimeRange(for: selectedDate) else {
+                    return false
+                }
+                return abs(timeRange.start.timeIntervalSince(activity.startTime)) < 60
+            }) {
+            // Update the activity duration
+            scheduledActivityManager.updateActivityDuration(scheduledActivity, to: newDuration)
+            // Provide haptic feedback
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } else {
+            // Try to update in activity store
+            activityStore.updateActivityDuration(activity, to: newDuration)
+        }
+    }
 }
 
 // MARK: - Day Calendar View
@@ -247,19 +299,36 @@ struct DayCalendarView: View {
     let onActivityTap: (PlannedActivity) -> Void
     let onAddTap: (Date) -> Void
     var onActivityTimeChanged: ((PlannedActivity, Date) -> Void)? = nil
+    var onActivityDurationChanged: ((PlannedActivity, Int) -> Void)? = nil
 
     private let hourHeight: CGFloat = 60
     private let hours = Array(0..<24)
     private let timeColumnWidth: CGFloat = 50
     private let eventPadding: CGFloat = 4
 
+    // Filter out Activslot-created events to avoid duplicates
+    private var filteredExternalEvents: [CalendarEvent] {
+        externalEvents.filter { event in
+            let lowercaseTitle = event.title.lowercased()
+            // Skip events created by Activslot (they're already shown as activities)
+            let isActivslotEvent = lowercaseTitle.contains("walk break") ||
+                                   lowercaseTitle.contains("morning walk") ||
+                                   lowercaseTitle.contains("afternoon walk") ||
+                                   lowercaseTitle.contains("evening walk") ||
+                                   lowercaseTitle.contains("workout") ||
+                                   lowercaseTitle.contains("activslot") ||
+                                   (event.notes?.contains("Activslot") ?? false)
+            return !isActivslotEvent
+        }
+    }
+
     // Separate all-day events from timed events
     private var allDayEvents: [CalendarEvent] {
-        externalEvents.filter { $0.duration >= 1440 } // 24 hours or more
+        filteredExternalEvents.filter { $0.duration >= 1440 } // 24 hours or more
     }
 
     private var timedEvents: [CalendarEvent] {
-        externalEvents.filter { $0.duration < 1440 }
+        filteredExternalEvents.filter { $0.duration < 1440 }
     }
 
     // Calculate horizontal positions for overlapping events
@@ -366,6 +435,9 @@ struct DayCalendarView: View {
                                 onTap: { onActivityTap(activity) },
                                 onTimeChanged: { newTime in
                                     onActivityTimeChanged?(activity, newTime)
+                                },
+                                onDurationChanged: { newDuration in
+                                    onActivityDurationChanged?(activity, newDuration)
                                 }
                             )
                         }
@@ -554,16 +626,23 @@ struct ActivityBlock: View {
     var offset: CGFloat = 0
     let onTap: () -> Void
     var onTimeChanged: ((Date) -> Void)? = nil
+    var onDurationChanged: ((Int) -> Void)? = nil
 
     @State private var isDragging = false
     @State private var dragOffset: CGFloat = 0
-    @State private var currentDragHour: Int? = nil
+    @State private var currentDragTime: (hour: Int, minute: Int)? = nil
     @GestureState private var isLongPressing = false
+
+    // Resize state
+    @State private var isResizing = false
+    @State private var resizeOffset: CGFloat = 0
+    @State private var currentResizeDuration: Int? = nil
 
     var body: some View {
         let baseYOffset = calculateYOffset()
         let yOffset = baseYOffset + dragOffset
-        let height = calculateHeight()
+        let baseHeight = calculateHeight()
+        let height = baseHeight + resizeOffset
 
         GeometryReader { geometry in
             let availableWidth = geometry.size.width - 82 // 66 leading + 16 trailing
@@ -571,51 +650,104 @@ struct ActivityBlock: View {
             let leadingOffset = 66 + (availableWidth * offset)
 
             ZStack {
-                // Activity content
-                HStack(spacing: 6) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(activity.color)
-                        .frame(width: 4)
+                VStack(spacing: 0) {
+                    // Activity content
+                    HStack(spacing: 6) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(activity.color)
+                            .frame(width: 4)
 
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(activity.title)
-                            .font(.caption2)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(activity.title)
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
 
-                        if height > 35 {
-                            if isDragging, let hour = currentDragHour {
-                                Text(formatHour(hour))
-                                    .font(.caption2)
-                                    .foregroundColor(.blue)
-                                    .fontWeight(.medium)
-                            } else {
-                                Text(activity.timeRangeFormatted)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
+                            if height > 35 {
+                                if isDragging, let time = currentDragTime {
+                                    Text(formatTime(hour: time.hour, minute: time.minute))
+                                        .font(.caption2)
+                                        .foregroundColor(.blue)
+                                        .fontWeight(.medium)
+                                } else if isResizing, let dur = currentResizeDuration {
+                                    Text("\(dur) min")
+                                        .font(.caption2)
+                                        .foregroundColor(.orange)
+                                        .fontWeight(.medium)
+                                } else {
+                                    Text(activity.timeRangeFormatted)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                }
                             }
                         }
+
+                        Spacer(minLength: 0)
+
+                        if height > 30 {
+                            Image(systemName: isDragging ? "arrow.up.and.down" : (isResizing ? "arrow.up.and.down.and.arrow.left.and.right" : activity.icon))
+                                .font(.caption2)
+                                .foregroundColor(isDragging || isResizing ? .blue : activity.color)
+                        }
                     }
+                    .padding(6)
 
                     Spacer(minLength: 0)
 
-                    if height > 30 {
-                        Image(systemName: isDragging ? "arrow.up.and.down" : activity.icon)
-                            .font(.caption2)
-                            .foregroundColor(isDragging ? .blue : activity.color)
-                    }
+                    // Resize handle at bottom
+                    Rectangle()
+                        .fill(isResizing ? Color.orange : Color.clear)
+                        .frame(height: 8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(isResizing ? Color.orange : activity.color.opacity(0.5))
+                                .frame(width: 30, height: 3)
+                        )
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture()
+                                .onChanged { value in
+                                    if !isResizing {
+                                        isResizing = true
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    }
+                                    // Calculate new duration and snap to 15-minute intervals
+                                    let newHeightPx = baseHeight + value.translation.height
+                                    let newMinutes = Int((newHeightPx / hourHeight) * 60)
+                                    let snappedMinutes = max(15, (newMinutes / 15) * 15)
+                                    // Snap the visual offset to match the snapped duration
+                                    let snappedHeight = CGFloat(snappedMinutes) / 60.0 * hourHeight
+                                    resizeOffset = snappedHeight - baseHeight
+                                    currentResizeDuration = snappedMinutes
+                                }
+                                .onEnded { value in
+                                    // Use the already snapped value from currentResizeDuration
+                                    if let duration = currentResizeDuration {
+                                        // Reset visual state first to prevent jump
+                                        resizeOffset = 0
+                                        isResizing = false
+                                        currentResizeDuration = nil
+                                        onDurationChanged?(duration)
+                                    } else {
+                                        withAnimation(.spring(response: 0.3)) {
+                                            isResizing = false
+                                            resizeOffset = 0
+                                            currentResizeDuration = nil
+                                        }
+                                    }
+                                }
+                        )
                 }
-                .padding(6)
                 .frame(width: activityWidth, alignment: .leading)
                 .frame(height: max(height - 4, 26))
-                .background(isDragging ? activity.color.opacity(0.35) : activity.color.opacity(0.2))
+                .background((isDragging || isResizing) ? activity.color.opacity(0.35) : activity.color.opacity(0.2))
                 .cornerRadius(6)
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(isDragging ? Color.blue : activity.color, lineWidth: isDragging ? 2 : 1)
+                        .stroke((isDragging || isResizing) ? Color.blue : activity.color, lineWidth: (isDragging || isResizing) ? 2 : 1)
                 )
-                .shadow(color: isDragging ? Color.black.opacity(0.2) : .clear, radius: 4, y: 2)
+                .shadow(color: (isDragging || isResizing) ? Color.black.opacity(0.2) : .clear, radius: 4, y: 2)
                 .scaleEffect(isDragging ? 1.02 : 1.0)
             }
             .position(x: leadingOffset + activityWidth / 2, y: yOffset + height / 2)
@@ -636,11 +768,16 @@ struct ActivityBlock: View {
                         case .second(true, let drag):
                             // Dragging
                             if let drag = drag {
-                                dragOffset = drag.translation.height
-                                // Calculate new hour based on drag position
-                                let newY = baseYOffset + drag.translation.height
-                                let newHour = Int(newY / hourHeight)
-                                currentDragHour = max(0, min(23, newHour))
+                                // Snap drag offset to 15-minute intervals for smooth visual feedback
+                                let rawNewY = baseYOffset + drag.translation.height
+                                let totalMinutes = Int((rawNewY / hourHeight) * 60)
+                                let snappedMinutes = max(0, min(23 * 60 + 45, (totalMinutes / 15) * 15))
+                                let snappedY = CGFloat(snappedMinutes) / 60.0 * hourHeight
+                                dragOffset = snappedY - baseYOffset
+
+                                let snappedHour = snappedMinutes / 60
+                                let snappedMinute = snappedMinutes % 60
+                                currentDragTime = (hour: snappedHour, minute: snappedMinute)
                             }
                         default:
                             break
@@ -648,27 +785,27 @@ struct ActivityBlock: View {
                     }
                     .onEnded { value in
                         if case .second(true, let drag) = value, let drag = drag {
-                            // Snap to nearest 15-minute interval
-                            let newY = baseYOffset + drag.translation.height
-                            let totalMinutes = Int((newY / hourHeight) * 60)
-                            let snappedMinutes = (totalMinutes / 15) * 15
-                            let newHour = snappedMinutes / 60
-                            let newMinute = snappedMinutes % 60
+                            // Use the already snapped values from currentDragTime
+                            if let time = currentDragTime {
+                                var components = Calendar.current.dateComponents([.year, .month, .day], from: activity.startTime)
+                                components.hour = time.hour
+                                components.minute = time.minute
 
-                            // Create new time
-                            var components = Calendar.current.dateComponents([.year, .month, .day], from: activity.startTime)
-                            components.hour = max(0, min(23, newHour))
-                            components.minute = max(0, min(59, newMinute))
-
-                            if let newTime = Calendar.current.date(from: components) {
-                                onTimeChanged?(newTime)
+                                if let newTime = Calendar.current.date(from: components) {
+                                    // Update the time - reset dragOffset first to prevent jump
+                                    dragOffset = 0
+                                    isDragging = false
+                                    currentDragTime = nil
+                                    onTimeChanged?(newTime)
+                                    return
+                                }
                             }
                         }
 
                         withAnimation(.spring(response: 0.3)) {
                             isDragging = false
                             dragOffset = 0
-                            currentDragHour = nil
+                            currentDragTime = nil
                         }
                     }
             )
@@ -696,16 +833,16 @@ struct ActivityBlock: View {
         CGFloat(activity.duration) / 60 * hourHeight
     }
 
-    private func formatHour(_ hour: Int) -> String {
+    private func formatTime(hour: Int, minute: Int) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm a"
         var components = DateComponents()
         components.hour = hour
-        components.minute = 0
+        components.minute = minute
         if let date = Calendar.current.date(from: components) {
             return formatter.string(from: date)
         }
-        return "\(hour):00"
+        return "\(hour):\(String(format: "%02d", minute))"
     }
 }
 
