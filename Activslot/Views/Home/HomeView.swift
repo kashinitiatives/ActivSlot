@@ -18,8 +18,7 @@ struct HomeView: View {
     @State private var showScheduleWalk = false
     @State private var showScheduleWorkout = false
     @State private var showScheduledActivities = false
-    @State private var showCustomTimeSheet = false
-    @State private var customTimeActivityType: ActivityType = .walk
+    @State private var customTimeRequest: CustomTimeRequest?
     @State private var conflictToResolve: ScheduleConflict?
     @State private var selectedDay: SelectedDay = .today
     @State private var slotToSchedule: StepSlot?
@@ -27,6 +26,12 @@ struct HomeView: View {
 
     enum SelectedDay {
         case today, tomorrow
+    }
+
+    struct CustomTimeRequest: Identifiable {
+        let id = UUID()
+        let activityType: ActivityType
+        let date: Date
     }
 
     var body: some View {
@@ -49,6 +54,9 @@ struct HomeView: View {
                             conflicts: planManager.todayConflicts,
                             onResolve: { conflict in
                                 conflictToResolve = conflict
+                            },
+                            onDismiss: { conflict in
+                                scheduledActivityManager.dismissConflict(conflict, for: Date())
                             }
                         )
                     }
@@ -159,8 +167,8 @@ struct HomeView: View {
                             UINotificationFeedbackGenerator().notificationOccurred(.success)
                         },
                         onCustomTime: { activityType in
-                            customTimeActivityType = activityType
-                            showCustomTimeSheet = true
+                            let targetDate = selectedDay == .today ? Date() : Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+                            customTimeRequest = CustomTimeRequest(activityType: activityType, date: targetDate)
                         }
                     )
 
@@ -197,7 +205,7 @@ struct HomeView: View {
                 }
                 .padding()
             }
-            .navigationTitle(selectedDay == .today ? "Today" : "Tomorrow")
+            .navigationTitle(selectedDay == .today ? "Today, \(currentDayOfWeek)" : "Tomorrow, \(tomorrowDayOfWeek)")
             .refreshable {
                 await refreshData()
             }
@@ -245,10 +253,10 @@ struct HomeView: View {
                     )
                 }
             }
-            .sheet(isPresented: $showCustomTimeSheet) {
+            .sheet(item: $customTimeRequest) { request in
                 CustomTimeSlotSheet(
-                    activityType: customTimeActivityType,
-                    date: selectedDay == .today ? Date() : Calendar.current.date(byAdding: .day, value: 1, to: Date())!,
+                    activityType: request.activityType,
+                    date: request.date,
                     onScheduled: {
                         // Don't regenerate plans - keep slots visible for user to add more
                     }
@@ -262,6 +270,8 @@ struct HomeView: View {
                     activity: conflict.scheduledActivity,
                     conflictDescription: conflict.description,
                     onRescheduled: {
+                        // Dismiss the conflict so it doesn't reappear
+                        scheduledActivityManager.dismissConflict(conflict, for: Date())
                         Task { await planManager.generatePlans() }
                     }
                 )
@@ -290,6 +300,19 @@ struct HomeView: View {
         await planManager.generatePlans()
         await insightsManager.analyzePatterns()
         isRefreshing = false
+    }
+
+    private var currentDayOfWeek: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: Date())
+    }
+
+    private var tomorrowDayOfWeek: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        return formatter.string(from: tomorrow)
     }
 
     /// Consolidates slots that start at the same time into a single slot
@@ -940,15 +963,11 @@ struct MovementPlanSection: View {
 struct ConflictsAlertSection: View {
     let conflicts: [ScheduleConflict]
     var onResolve: (ScheduleConflict) -> Void
+    var onDismiss: (ScheduleConflict) -> Void
     @State private var isExpanded = false
-    @State private var dismissedConflictIds: Set<UUID> = []
-
-    private var visibleConflicts: [ScheduleConflict] {
-        conflicts.filter { !dismissedConflictIds.contains($0.id) }
-    }
 
     var body: some View {
-        if !visibleConflicts.isEmpty {
+        if !conflicts.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 // Header - tap to expand/collapse
                 Button {
@@ -964,7 +983,7 @@ struct ConflictsAlertSection: View {
                             .font(.headline)
                             .foregroundColor(.primary)
 
-                        Text("(\(visibleConflicts.count))")
+                        Text("(\(conflicts.count))")
                             .font(.caption)
                             .foregroundColor(.secondary)
 
@@ -979,7 +998,7 @@ struct ConflictsAlertSection: View {
                 // Collapsed summary
                 if !isExpanded {
                     HStack {
-                        Text(visibleConflicts.map { $0.scheduledActivity.title }.joined(separator: ", "))
+                        Text(conflicts.map { $0.scheduledActivity.title }.joined(separator: ", "))
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
@@ -994,13 +1013,13 @@ struct ConflictsAlertSection: View {
 
                 // Expanded list with swipe to dismiss
                 if isExpanded {
-                    ForEach(visibleConflicts) { conflict in
+                    ForEach(conflicts) { conflict in
                         ConflictRow(
                             conflict: conflict,
                             onResolve: { onResolve(conflict) },
                             onDismiss: {
                                 withAnimation {
-                                    _ = dismissedConflictIds.insert(conflict.id)
+                                    onDismiss(conflict)
                                 }
                             }
                         )
@@ -1223,8 +1242,6 @@ struct ScheduledActivitiesSection: View {
     @ObservedObject var activityStore = ActivityStore.shared
     @State private var activityToEdit: ScheduledActivity?
     @State private var calendarActivityToEdit: PlannedActivity?
-    @State private var showEditSheet = false
-    @State private var showCalendarActivitySheet = false
 
     private var isToday: Bool {
         Calendar.current.isDateInToday(date)
@@ -1327,7 +1344,6 @@ struct ScheduledActivitiesSection: View {
                         },
                         onTap: {
                             activityToEdit = activity
-                            showEditSheet = true
                         },
                         onDelete: {
                             withAnimation(.spring(response: 0.3)) {
@@ -1352,7 +1368,6 @@ struct ScheduledActivitiesSection: View {
                         },
                         onTap: {
                             calendarActivityToEdit = calActivity
-                            showCalendarActivitySheet = true
                         },
                         onDelete: {
                             withAnimation(.spring(response: 0.3)) {
@@ -1363,16 +1378,12 @@ struct ScheduledActivitiesSection: View {
                 }
             }
         }
-        .sheet(isPresented: $showEditSheet) {
-            if let activity = activityToEdit {
-                EditScheduledActivitySheet(activity: activity)
-            }
+        .sheet(item: $activityToEdit) { activity in
+            EditScheduledActivitySheet(activity: activity)
         }
-        .sheet(isPresented: $showCalendarActivitySheet) {
-            if let activity = calendarActivityToEdit {
-                ActivityDetailSheet(activity: activity)
-                    .environmentObject(activityStore)
-            }
+        .sheet(item: $calendarActivityToEdit) { activity in
+            ActivityDetailSheet(activity: activity)
+                .environmentObject(activityStore)
         }
     }
 }

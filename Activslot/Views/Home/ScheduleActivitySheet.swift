@@ -398,9 +398,52 @@ struct ScheduledActivitiesListSheet: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var scheduledActivityManager = ScheduledActivityManager.shared
 
-    @State private var activityToReschedule: ScheduledActivity?
+    @State private var activityToEdit: ScheduledActivity?
     @State private var activityToDelete: ScheduledActivity?
     @State private var showDeleteConfirmation = false
+
+    private var dateFormatter: DateFormatter {
+        let f = DateFormatter()
+        f.dateFormat = "EEEE, MMM d"
+        return f
+    }
+
+    private var timeFormatter: DateFormatter {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        return f
+    }
+
+    // Get upcoming 7 days of activities
+    private var upcomingActivities: [(date: Date, activities: [ScheduledActivity])] {
+        let calendar = Calendar.current
+        var result: [(date: Date, activities: [ScheduledActivity])] = []
+
+        for dayOffset in 0..<7 {
+            guard let date = calendar.date(byAdding: .day, value: dayOffset, to: calendar.startOfDay(for: Date())) else { continue }
+
+            let activitiesForDay = scheduledActivityManager.activities(for: date)
+                .sorted { a, b in
+                    if let aRange = a.getTimeRange(for: date), let bRange = b.getTimeRange(for: date) {
+                        return aRange.start < bRange.start
+                    }
+                    return false
+                }
+
+            if !activitiesForDay.isEmpty {
+                result.append((date: date, activities: activitiesForDay))
+            }
+        }
+
+        return result
+    }
+
+    // Get recurring activities
+    private var recurringActivities: [ScheduledActivity] {
+        scheduledActivityManager.scheduledActivities
+            .filter { $0.recurrence != .once && $0.isActive }
+            .sorted { $0.title < $1.title }
+    }
 
     var body: some View {
         NavigationStack {
@@ -424,14 +467,14 @@ struct ScheduledActivitiesListSheet: View {
                         .padding(.vertical, 32)
                     }
                 } else {
-                    // Walks Section
-                    let walks = scheduledActivityManager.scheduledActivities.filter { $0.activityType == .walk }
-                    if !walks.isEmpty {
+                    // Upcoming activities by date
+                    ForEach(upcomingActivities, id: \.date) { dayData in
                         Section {
-                            ForEach(walks) { activity in
-                                ScheduledActivityRow(
+                            ForEach(dayData.activities) { activity in
+                                ScheduledActivityListRow(
                                     activity: activity,
-                                    onReschedule: { activityToReschedule = activity },
+                                    date: dayData.date,
+                                    onEdit: { activityToEdit = activity },
                                     onDelete: {
                                         activityToDelete = activity
                                         showDeleteConfirmation = true
@@ -439,18 +482,27 @@ struct ScheduledActivitiesListSheet: View {
                                 )
                             }
                         } header: {
-                            Label("Walks", systemImage: "figure.walk")
+                            HStack {
+                                if Calendar.current.isDateInToday(dayData.date) {
+                                    Text("Today")
+                                        .fontWeight(.semibold)
+                                } else if Calendar.current.isDateInTomorrow(dayData.date) {
+                                    Text("Tomorrow")
+                                        .fontWeight(.semibold)
+                                } else {
+                                    Text(dateFormatter.string(from: dayData.date))
+                                }
+                            }
                         }
                     }
 
-                    // Workouts Section
-                    let workouts = scheduledActivityManager.scheduledActivities.filter { $0.activityType == .workout }
-                    if !workouts.isEmpty {
+                    // Recurring activities section
+                    if !recurringActivities.isEmpty {
                         Section {
-                            ForEach(workouts) { activity in
-                                ScheduledActivityRow(
+                            ForEach(recurringActivities) { activity in
+                                RecurringActivityRow(
                                     activity: activity,
-                                    onReschedule: { activityToReschedule = activity },
+                                    onEdit: { activityToEdit = activity },
                                     onDelete: {
                                         activityToDelete = activity
                                         showDeleteConfirmation = true
@@ -458,12 +510,12 @@ struct ScheduledActivitiesListSheet: View {
                                 )
                             }
                         } header: {
-                            Label("Workouts", systemImage: "dumbbell.fill")
+                            Label("Recurring", systemImage: "repeat")
                         }
                     }
                 }
             }
-            .navigationTitle("Scheduled Activities")
+            .navigationTitle("Your Schedule")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -472,8 +524,8 @@ struct ScheduledActivitiesListSheet: View {
                     }
                 }
             }
-            .sheet(item: $activityToReschedule) { activity in
-                RescheduleActivitySheet(activity: activity)
+            .sheet(item: $activityToEdit) { activity in
+                EditScheduledActivitySheet(activity: activity)
             }
             .alert("Delete Activity?", isPresented: $showDeleteConfirmation) {
                 Button("Cancel", role: .cancel) {}
@@ -485,12 +537,167 @@ struct ScheduledActivitiesListSheet: View {
             } message: {
                 if let activity = activityToDelete {
                     if activity.recurrence == .once {
-                        Text("This will remove the scheduled \(activity.title).")
+                        Text("This will remove \"\(activity.title)\".")
                     } else {
-                        Text("This will remove all occurrences of \(activity.title).")
+                        Text("This will remove all occurrences of \"\(activity.title)\".")
                     }
                 }
             }
+        }
+    }
+}
+
+// MARK: - Scheduled Activity List Row (with date context)
+
+struct ScheduledActivityListRow: View {
+    let activity: ScheduledActivity
+    let date: Date
+    var onEdit: () -> Void
+    var onDelete: () -> Void
+
+    @ObservedObject var scheduledActivityManager = ScheduledActivityManager.shared
+
+    private var isCompleted: Bool {
+        scheduledActivityManager.isCompleted(activity: activity, for: date)
+    }
+
+    private var timeRange: String {
+        if let range = activity.getTimeRange(for: date) {
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+            return "\(formatter.string(from: range.start)) - \(formatter.string(from: range.end))"
+        }
+        return activity.timeRangeFormatted
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Completion checkbox
+            Button {
+                withAnimation(.spring(response: 0.3)) {
+                    scheduledActivityManager.toggleCompletion(activity: activity, for: date)
+                }
+            } label: {
+                Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+                    .foregroundColor(isCompleted ? .green : .secondary)
+            }
+            .buttonStyle(.plain)
+
+            // Activity icon
+            Image(systemName: activity.icon)
+                .font(.title3)
+                .foregroundColor(isCompleted ? .secondary : activity.color)
+                .frame(width: 36, height: 36)
+                .background((isCompleted ? Color.secondary : activity.color).opacity(0.1))
+                .cornerRadius(8)
+
+            // Activity details
+            VStack(alignment: .leading, spacing: 4) {
+                Text(activity.title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .strikethrough(isCompleted)
+                    .foregroundColor(isCompleted ? .secondary : .primary)
+
+                HStack(spacing: 6) {
+                    Text(timeRange)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Text("•")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+
+                    Text("\(activity.duration) min")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer()
+
+            // Actions menu
+            Menu {
+                Button {
+                    onEdit()
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onEdit()
+        }
+    }
+}
+
+// MARK: - Recurring Activity Row
+
+struct RecurringActivityRow: View {
+    let activity: ScheduledActivity
+    var onEdit: () -> Void
+    var onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: activity.icon)
+                .font(.title3)
+                .foregroundColor(activity.color)
+                .frame(width: 36, height: 36)
+                .background(activity.color.opacity(0.1))
+                .cornerRadius(8)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(activity.title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                HStack(spacing: 8) {
+                    Text(activity.timeRangeFormatted)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Label(activity.recurrence.rawValue, systemImage: "repeat")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+            }
+
+            Spacer()
+
+            Menu {
+                Button {
+                    onEdit()
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete All", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onEdit()
         }
     }
 }
@@ -745,10 +952,526 @@ struct EditScheduledActivitySheet: View {
     }
 }
 
+// MARK: - Quick Workout Sheet (One-Tap Scheduling for Executives)
+
+struct QuickWorkoutSheet: View {
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var scheduledActivityManager = ScheduledActivityManager.shared
+    @ObservedObject var preferences = UserPreferences.shared
+
+    let targetDate: Date
+    var onScheduled: (() -> Void)?
+
+    @State private var selectedTimeSlot: QuickTimeSlot = .morning
+    @State private var selectedDuration: Int = 45
+    @State private var showSuccess = false
+
+    enum QuickTimeSlot: String, CaseIterable {
+        case morning = "Morning"
+        case lunch = "Lunch"
+        case evening = "Evening"
+
+        var icon: String {
+            switch self {
+            case .morning: return "sunrise.fill"
+            case .lunch: return "sun.max.fill"
+            case .evening: return "sunset.fill"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .morning: return .orange
+            case .lunch: return .yellow
+            case .evening: return .purple
+            }
+        }
+
+        var defaultHour: Int {
+            switch self {
+            case .morning: return 6
+            case .lunch: return 12
+            case .evening: return 18
+            }
+        }
+
+        var defaultMinute: Int {
+            switch self {
+            case .morning: return 30
+            case .lunch: return 0
+            case .evening: return 0
+            }
+        }
+
+        var timeDescription: String {
+            switch self {
+            case .morning: return "6:30 AM"
+            case .lunch: return "12:00 PM"
+            case .evening: return "6:00 PM"
+            }
+        }
+
+        var subtitle: String {
+            switch self {
+            case .morning: return "Start your day strong"
+            case .lunch: return "Midday energy boost"
+            case .evening: return "End day with movement"
+            }
+        }
+    }
+
+    private var startTime: Date {
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day], from: targetDate)
+        components.hour = selectedTimeSlot.defaultHour
+        components.minute = selectedTimeSlot.defaultMinute
+        return calendar.date(from: components) ?? targetDate
+    }
+
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMM d"
+        return formatter
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Header with date
+                VStack(spacing: 4) {
+                    Text("Schedule Workout")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    Text(dateFormatter.string(from: targetDate))
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 20)
+
+                // Time Slot Selection
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("When")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+
+                    HStack(spacing: 12) {
+                        ForEach(QuickTimeSlot.allCases, id: \.self) { slot in
+                            QuickTimeSlotButton(
+                                slot: slot,
+                                isSelected: selectedTimeSlot == slot,
+                                onTap: { selectedTimeSlot = slot }
+                            )
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                .padding(.bottom, 24)
+
+                // Duration Selection
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Duration")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+
+                    HStack(spacing: 12) {
+                        ForEach([30, 45, 60, 90], id: \.self) { duration in
+                            QuickDurationButton(
+                                duration: duration,
+                                isSelected: selectedDuration == duration,
+                                isRecommended: duration == preferences.workoutDuration.rawValue,
+                                onTap: { selectedDuration = duration }
+                            )
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                .padding(.bottom, 24)
+
+                // Summary Card
+                VStack(spacing: 12) {
+                    HStack {
+                        Image(systemName: "figure.strengthtraining.traditional")
+                            .font(.title2)
+                            .foregroundColor(.orange)
+                            .frame(width: 44, height: 44)
+                            .background(Color.orange.opacity(0.1))
+                            .cornerRadius(10)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Workout")
+                                .font(.headline)
+                            Text("\(selectedTimeSlot.timeDescription) • \(selectedDuration) min")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: selectedTimeSlot.icon)
+                            .font(.title2)
+                            .foregroundColor(selectedTimeSlot.color)
+                    }
+                }
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(12)
+                .padding(.horizontal)
+
+                Spacer()
+
+                // Schedule Button
+                Button {
+                    scheduleWorkout()
+                } label: {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Schedule Workout")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.orange)
+                    .cornerRadius(14)
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+
+                // Make Recurring Option
+                Button {
+                    scheduleWorkout(recurring: true)
+                } label: {
+                    HStack {
+                        Image(systemName: "repeat")
+                        Text("Make it Weekly")
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(.orange)
+                }
+                .padding(.bottom, 20)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+            .overlay {
+                if showSuccess {
+                    SuccessOverlay(message: "Workout Scheduled!")
+                        .transition(.opacity.combined(with: .scale))
+                }
+            }
+        }
+    }
+
+    private func scheduleWorkout(recurring: Bool = false) {
+        let activity = ScheduledActivity(
+            activityType: .workout,
+            workoutType: nil,
+            title: "Workout",
+            startTime: startTime,
+            duration: selectedDuration,
+            recurrence: recurring ? .weekly : .once
+        )
+
+        scheduledActivityManager.addScheduledActivity(activity)
+
+        // Show success feedback
+        withAnimation(.spring(response: 0.3)) {
+            showSuccess = true
+        }
+
+        // Haptic feedback
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+
+        // Dismiss after brief delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            onScheduled?()
+            dismiss()
+        }
+    }
+}
+
+// MARK: - Quick Time Slot Button
+
+struct QuickTimeSlotButton: View {
+    let slot: QuickWorkoutSheet.QuickTimeSlot
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 8) {
+                Image(systemName: slot.icon)
+                    .font(.title2)
+                    .foregroundColor(isSelected ? .white : slot.color)
+
+                Text(slot.rawValue)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(isSelected ? .white : .primary)
+
+                Text(slot.timeDescription)
+                    .font(.caption2)
+                    .foregroundColor(isSelected ? .white.opacity(0.8) : .secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(isSelected ? slot.color : Color(.secondarySystemBackground))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color.clear : Color.gray.opacity(0.2), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Quick Duration Button
+
+struct QuickDurationButton: View {
+    let duration: Int
+    let isSelected: Bool
+    let isRecommended: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 4) {
+                Text("\(duration)")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(isSelected ? .white : .primary)
+
+                Text("min")
+                    .font(.caption2)
+                    .foregroundColor(isSelected ? .white.opacity(0.8) : .secondary)
+
+                if isRecommended && !isSelected {
+                    Text("Rec")
+                        .font(.system(size: 9))
+                        .fontWeight(.medium)
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.15))
+                        .cornerRadius(4)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(isSelected ? Color.orange : Color(.secondarySystemBackground))
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? Color.clear : Color.gray.opacity(0.2), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Quick Walk Sheet (One-Tap Scheduling for Walks)
+
+struct QuickWalkSheet: View {
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var scheduledActivityManager = ScheduledActivityManager.shared
+
+    let targetDate: Date
+    let suggestedTime: Date?
+    let suggestedDuration: Int
+    var onScheduled: (() -> Void)?
+
+    @State private var selectedDuration: Int
+    @State private var showSuccess = false
+
+    init(targetDate: Date, suggestedTime: Date? = nil, suggestedDuration: Int = 20, onScheduled: (() -> Void)? = nil) {
+        self.targetDate = targetDate
+        self.suggestedTime = suggestedTime
+        self.suggestedDuration = suggestedDuration
+        self.onScheduled = onScheduled
+        self._selectedDuration = State(initialValue: suggestedDuration)
+    }
+
+    private var startTime: Date {
+        suggestedTime ?? targetDate
+    }
+
+    private var timeFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                // Walk Icon
+                Image(systemName: "figure.walk")
+                    .font(.system(size: 48))
+                    .foregroundColor(.green)
+                    .frame(width: 80, height: 80)
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(20)
+                    .padding(.top, 20)
+
+                // Time Display
+                VStack(spacing: 4) {
+                    Text("Walk Break")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    Text(timeFormatter.string(from: startTime))
+                        .font(.title)
+                        .fontWeight(.medium)
+                        .foregroundColor(.green)
+                }
+
+                // Duration Selection
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Duration")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+
+                    HStack(spacing: 12) {
+                        ForEach([15, 20, 30, 45], id: \.self) { duration in
+                            Button {
+                                selectedDuration = duration
+                            } label: {
+                                VStack(spacing: 4) {
+                                    Text("\(duration)")
+                                        .font(.title3)
+                                        .fontWeight(.semibold)
+                                    Text("min")
+                                        .font(.caption2)
+                                }
+                                .foregroundColor(selectedDuration == duration ? .white : .primary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(selectedDuration == duration ? Color.green : Color(.secondarySystemBackground))
+                                .cornerRadius(10)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+
+                // Estimated Steps
+                HStack {
+                    Image(systemName: "shoeprints.fill")
+                        .foregroundColor(.green)
+                    Text("~\(selectedDuration * 100) steps")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                // Schedule Button
+                Button {
+                    scheduleWalk()
+                } label: {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Schedule Walk")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.green)
+                    .cornerRadius(14)
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 20)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+            .overlay {
+                if showSuccess {
+                    SuccessOverlay(message: "Walk Scheduled!", color: .green)
+                        .transition(.opacity.combined(with: .scale))
+                }
+            }
+        }
+    }
+
+    private func scheduleWalk() {
+        let activity = ScheduledActivity(
+            activityType: .walk,
+            workoutType: nil,
+            title: "Walk Break",
+            startTime: startTime,
+            duration: selectedDuration,
+            recurrence: .once
+        )
+
+        scheduledActivityManager.addScheduledActivity(activity)
+
+        withAnimation(.spring(response: 0.3)) {
+            showSuccess = true
+        }
+
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            onScheduled?()
+            dismiss()
+        }
+    }
+}
+
+// MARK: - Success Overlay
+
+struct SuccessOverlay: View {
+    let message: String
+    var color: Color = .orange
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 56))
+                .foregroundColor(color)
+
+            Text(message)
+                .font(.headline)
+                .foregroundColor(.primary)
+        }
+        .padding(32)
+        .background(.ultraThinMaterial)
+        .cornerRadius(20)
+    }
+}
+
 #Preview {
     ScheduleActivitySheet(
         activityType: .walk,
         suggestedTime: Date(),
         suggestedDuration: 30
     )
+}
+
+#Preview("Quick Workout") {
+    QuickWorkoutSheet(targetDate: Date())
+}
+
+#Preview("Quick Walk") {
+    QuickWalkSheet(targetDate: Date(), suggestedTime: Date(), suggestedDuration: 20)
 }

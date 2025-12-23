@@ -249,14 +249,83 @@ class ScheduledActivityManager: ObservableObject {
     @Published var conflicts: [ScheduleConflict] = []
     @Published var completions: [ActivityCompletion] = []
 
+    // Track dismissed conflicts so they don't reappear
+    // Key: "activityId_eventTitle_date" to uniquely identify a conflict
+    @Published private(set) var dismissedConflictKeys: Set<String> = []
+
     private let saveKey = "scheduledActivities"
     private let patternsKey = "activityTimePatterns"
     private let completionsKey = "activityCompletions"
+    private let dismissedConflictsKey = "dismissedConflictKeys"
 
     private init() {
         loadScheduledActivities()
         loadTimePatterns()
         loadCompletions()
+        loadDismissedConflicts()
+    }
+
+    // MARK: - Dismissed Conflicts Management
+
+    /// Generate a unique key for a conflict
+    private func conflictKey(for conflict: ScheduleConflict, date: Date) -> String {
+        let dateString = formatDateString(date)
+        return "\(conflict.scheduledActivity.id.uuidString)_\(conflict.conflictingEvent.title)_\(dateString)"
+    }
+
+    private func formatDateString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    /// Dismiss a conflict so it won't show again
+    func dismissConflict(_ conflict: ScheduleConflict, for date: Date) {
+        let key = conflictKey(for: conflict, date: date)
+        dismissedConflictKeys.insert(key)
+        saveDismissedConflicts()
+
+        // Remove from current conflicts list
+        conflicts.removeAll { c in
+            c.scheduledActivity.id == conflict.scheduledActivity.id &&
+            c.conflictingEvent.title == conflict.conflictingEvent.title
+        }
+    }
+
+    /// Check if a conflict has been dismissed
+    func isConflictDismissed(_ conflict: ScheduleConflict, for date: Date) -> Bool {
+        let key = conflictKey(for: conflict, date: date)
+        return dismissedConflictKeys.contains(key)
+    }
+
+    /// Clear old dismissed conflicts (older than 7 days)
+    func cleanupOldDismissedConflicts() {
+        let calendar = Calendar.current
+        let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        let cutoffString = formatDateString(sevenDaysAgo)
+
+        dismissedConflictKeys = dismissedConflictKeys.filter { key in
+            // Extract date from key (last component after _)
+            let components = key.components(separatedBy: "_")
+            guard let dateString = components.last else { return false }
+            return dateString >= cutoffString
+        }
+        saveDismissedConflicts()
+    }
+
+    private func saveDismissedConflicts() {
+        if let data = try? JSONEncoder().encode(Array(dismissedConflictKeys)) {
+            UserDefaults.standard.set(data, forKey: dismissedConflictsKey)
+        }
+    }
+
+    private func loadDismissedConflicts() {
+        if let data = UserDefaults.standard.data(forKey: dismissedConflictsKey),
+           let keys = try? JSONDecoder().decode([String].self, from: data) {
+            dismissedConflictKeys = Set(keys)
+        }
+        // Cleanup old ones on load
+        cleanupOldDismissedConflicts()
     }
 
     // MARK: - CRUD Operations
@@ -583,17 +652,25 @@ class ScheduledActivityManager: ObservableObject {
                 let tooCloseAfter = abs(event.endDate.timeIntervalSince(timeRange.start)) < 30 * 60
 
                 if hasOverlap {
-                    foundConflicts.append(ScheduleConflict(
+                    let conflict = ScheduleConflict(
                         scheduledActivity: activity,
                         conflictingEvent: event,
                         conflictType: .overlap
-                    ))
+                    )
+                    // Only add if not dismissed
+                    if !isConflictDismissed(conflict, for: date) {
+                        foundConflicts.append(conflict)
+                    }
                 } else if tooCloseBefore || tooCloseAfter {
-                    foundConflicts.append(ScheduleConflict(
+                    let conflict = ScheduleConflict(
                         scheduledActivity: activity,
                         conflictingEvent: event,
                         conflictType: .tooClose
-                    ))
+                    )
+                    // Only add if not dismissed
+                    if !isConflictDismissed(conflict, for: date) {
+                        foundConflicts.append(conflict)
+                    }
                 }
             }
         }

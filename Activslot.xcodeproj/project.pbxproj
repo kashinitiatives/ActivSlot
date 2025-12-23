@@ -34,6 +34,7 @@
 		72C9428DCCCC0004CAFBCC /* CalendarSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C9428ECCCC0004CAFBCC /* CalendarSyncService.swift */; };
 		72C9428FDDDD0001CAFBCC /* ScheduledActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */; };
 		72C94291DDDD0002CAFBCC /* ScheduleActivitySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94292DDDD0002CAFBCC /* ScheduleActivitySheet.swift */; };
+		72C94293EEEE0001CAFBCC /* AutoWalkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94294EEEE0001CAFBCC /* AutoWalkManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -66,6 +67,7 @@
 		72C9428ECCCC0004CAFBCC /* CalendarSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSyncService.swift; sourceTree = "<group>"; };
 		72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledActivityManager.swift; sourceTree = "<group>"; };
 		72C94292DDDD0002CAFBCC /* ScheduleActivitySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleActivitySheet.swift; sourceTree = "<group>"; };
+		72C94294EEEE0001CAFBCC /* AutoWalkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoWalkManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -122,6 +124,7 @@
 				72C94286BBBB0001CAFBCC /* PersonalInsightsManager.swift */,
 				72C9428ECCCC0004CAFBCC /* CalendarSyncService.swift */,
 				72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */,
+				72C94294EEEE0001CAFBCC /* AutoWalkManager.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -295,6 +298,7 @@
 				72C9428DCCCC0004CAFBCC /* CalendarSyncService.swift in Sources */,
 				72C9428FDDDD0001CAFBCC /* ScheduledActivityManager.swift in Sources */,
 				72C94291DDDD0002CAFBCC /* ScheduleActivitySheet.swift in Sources */,
+				72C94293EEEE0001CAFBCC /* AutoWalkManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -135,6 +135,18 @@ class UserPreferences: ObservableObject {
     @AppStorage("ageGroup") private var ageGroupRaw: String = ""
     @AppStorage("workoutConfigured") var workoutConfigured: Bool = false
 
+    // MARK: - Auto Walk Mode
+    @AppStorage("autoWalkEnabled") var autoWalkEnabled: Bool = false
+    @AppStorage("autoWalkDuration") var autoWalkDuration: Int = 60 // minutes
+    @AppStorage("autoWalkPreferredTime") var autoWalkPreferredTimeRaw: String = "Morning"
+    @AppStorage("autoWalkSyncToCalendar") var autoWalkSyncToCalendar: Bool = true
+    @AppStorage("autoWalkCalendarID") var autoWalkCalendarID: String = ""
+
+    var autoWalkPreferredTime: PreferredWalkTime {
+        get { PreferredWalkTime(rawValue: autoWalkPreferredTimeRaw) ?? .morning }
+        set { autoWalkPreferredTimeRaw = newValue.rawValue }
+    }
+
     // MARK: - Computed Properties
 
     var gymFrequency: GymFrequency {
