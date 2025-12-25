@@ -146,6 +146,13 @@ struct ActivslotCalendarView: View {
             .task {
                 await loadExternalEvents()
             }
+            .onAppear {
+                // Refresh calendar data when view appears (e.g., switching tabs)
+                Task {
+                    await calendarManager.refreshEvents()
+                    await loadExternalEvents()
+                }
+            }
             .onChange(of: selectedDate) { _, _ in
                 Task {
                     await loadExternalEvents()

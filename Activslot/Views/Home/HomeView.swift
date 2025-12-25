@@ -212,6 +212,13 @@ struct HomeView: View {
             .task {
                 await loadInitialData()
             }
+            .onAppear {
+                // Refresh calendar data when view appears (e.g., switching tabs)
+                Task {
+                    await calendarManager.refreshEvents()
+                    await planManager.generatePlans()
+                }
+            }
             .sheet(isPresented: $showWorkoutSetup) {
                 WorkoutSetupSheet()
                     .environmentObject(userPreferences)
