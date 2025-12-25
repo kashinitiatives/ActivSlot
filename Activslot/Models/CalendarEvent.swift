@@ -46,10 +46,21 @@ struct CalendarEvent: Identifiable {
         return false
     }
 
+    /// Check if this is a long meeting (> 2 hours but not all-day)
+    var isLongMeeting: Bool {
+        duration > 120 && !isAllDay
+    }
+
+    /// Check if this event should be excluded from scheduling calculations
+    /// Excludes all-day events, out-of-office events, and very long meetings
+    var shouldExcludeFromScheduling: Bool {
+        isAllDay || isOutOfOffice || isLongMeeting
+    }
+
     /// Check if this event should be counted as real meeting time for insights
     /// Excludes all-day events and out-of-office events
     var isRealMeeting: Bool {
-        !isAllDay && !isOutOfOffice
+        !isAllDay && !isOutOfOffice && !isLongMeeting
     }
 
     var isWalkable: Bool {

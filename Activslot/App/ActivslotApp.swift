@@ -33,8 +33,15 @@ struct ActivslotApp: App {
             // App became active - refresh notification authorization status
             NotificationManager.shared.checkAuthorizationStatus()
 
-            // Refresh daily notifications and auto walk scheduling
+            // Refresh calendar data and regenerate plans
             Task {
+                // Refresh calendar events first
+                await calendarManager.refreshEvents()
+
+                // Regenerate movement plans with updated calendar data
+                await MovementPlanManager.shared.generatePlans()
+
+                // Refresh daily notifications and auto walk scheduling
                 await NotificationManager.shared.refreshDailyNotifications()
                 await AutoWalkManager.shared.scheduleAutoWalkForTomorrow()
             }

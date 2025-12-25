@@ -795,7 +795,628 @@ struct SetupStep: View {
     }
 }
 
+// MARK: - Work Calendar Setup View (Generic for all providers)
+
+struct WorkCalendarSetupView: View {
+    @EnvironmentObject var calendarManager: CalendarManager
+    @EnvironmentObject var outlookManager: OutlookManager
+
+    @State private var showOutlookError = false
+    @State private var outlookErrorMessage = ""
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                // Header
+                VStack(alignment: .leading, spacing: 8) {
+                    Image(systemName: "calendar.badge.plus")
+                        .font(.system(size: 44))
+                        .foregroundColor(.blue)
+
+                    Text("Connect Work Calendar")
+                        .font(.title2)
+                        .bold()
+
+                    Text("Choose your work calendar provider to sync your meetings with Activslot.")
+                        .foregroundColor(.secondary)
+                }
+
+                // Recommendation banner
+                HStack(spacing: 12) {
+                    Image(systemName: "lightbulb.fill")
+                        .foregroundColor(.yellow)
+                    Text("**Recommended:** Sync through iOS Settings for the most reliable experience. No IT approval needed!")
+                        .font(.caption)
+                }
+                .padding()
+                .background(Color.yellow.opacity(0.1))
+                .cornerRadius(12)
+
+                Divider()
+
+                // Calendar Provider Options
+                VStack(spacing: 16) {
+                    Text("Select Your Calendar Provider")
+                        .font(.headline)
+
+                    // Microsoft 365 / Outlook
+                    NavigationLink {
+                        OutlookSetupGuideView()
+                    } label: {
+                        CalendarProviderCard(
+                            icon: "envelope.fill",
+                            iconColor: .blue,
+                            title: "Microsoft 365 / Outlook",
+                            subtitle: "Exchange, Office 365, Outlook.com",
+                            isConnected: calendarManager.hasOutlookCalendar || outlookManager.isSignedIn
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    // Google Workspace / Gmail
+                    NavigationLink {
+                        GoogleSetupGuideView()
+                    } label: {
+                        CalendarProviderCard(
+                            icon: "g.circle.fill",
+                            iconColor: .red,
+                            title: "Google Workspace / Gmail",
+                            subtitle: "Google Calendar, G Suite",
+                            isConnected: calendarManager.hasGoogleCalendar
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    // Generic Exchange/SSO
+                    NavigationLink {
+                        ExchangeSSOSetupGuideView()
+                    } label: {
+                        CalendarProviderCard(
+                            icon: "building.2.fill",
+                            iconColor: .purple,
+                            title: "Other Work Account",
+                            subtitle: "Exchange, SSO, or corporate email",
+                            isConnected: false
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    // iCloud
+                    NavigationLink {
+                        ICloudSetupGuideView()
+                    } label: {
+                        CalendarProviderCard(
+                            icon: "icloud.fill",
+                            iconColor: .cyan,
+                            title: "iCloud Calendar",
+                            subtitle: "Apple's built-in calendar",
+                            isConnected: calendarManager.hasICloudCalendar
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Divider()
+
+                // Already synced note
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "info.circle.fill")
+                            .foregroundColor(.blue)
+                        Text("Already synced calendars")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+
+                    Text("If your work calendar is already synced to your iPhone through Settings > Calendar > Accounts, it will appear automatically in Activslot.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(12)
+            }
+            .padding()
+        }
+        .navigationTitle("Work Calendar")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Calendar Provider Card
+
+struct CalendarProviderCard: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let subtitle: String
+    let isConnected: Bool
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundColor(.white)
+                .frame(width: 48, height: 48)
+                .background(iconColor)
+                .cornerRadius(12)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            if isConnected {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+            } else {
+                Image(systemName: "chevron.right")
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+    }
+}
+
+// MARK: - Exchange/SSO Setup Guide
+
+struct ExchangeSSOSetupGuideView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                // Header
+                VStack(alignment: .leading, spacing: 8) {
+                    Image(systemName: "building.2.fill")
+                        .font(.system(size: 44))
+                        .foregroundColor(.purple)
+
+                    Text("Add Work Account")
+                        .font(.title2)
+                        .bold()
+
+                    Text("Connect your corporate email/calendar using Exchange or SSO.")
+                        .foregroundColor(.secondary)
+                }
+
+                // Admin note
+                AdminPermissionWarningCard()
+
+                Divider()
+
+                Text("Setup via iOS Settings")
+                    .font(.headline)
+
+                VStack(alignment: .leading, spacing: 16) {
+                    SetupStepWithIcon(
+                        number: 1,
+                        icon: "gear",
+                        title: "Open Settings",
+                        description: "Go to your iPhone's Settings app"
+                    )
+
+                    SetupStepWithIcon(
+                        number: 2,
+                        icon: "calendar",
+                        title: "Calendar → Accounts",
+                        description: "Tap 'Calendar', then 'Accounts'"
+                    )
+
+                    SetupStepWithIcon(
+                        number: 3,
+                        icon: "plus.circle.fill",
+                        title: "Add Account",
+                        description: "Tap 'Add Account' at the bottom"
+                    )
+
+                    SetupStepWithIcon(
+                        number: 4,
+                        icon: "building.2.fill",
+                        title: "Choose Provider",
+                        description: "Select 'Microsoft Exchange', 'Other', or your company's SSO provider"
+                    )
+
+                    SetupStepWithIcon(
+                        number: 5,
+                        icon: "envelope.fill",
+                        title: "Enter Work Email",
+                        description: "Type your work email and follow SSO prompts"
+                    )
+
+                    SetupStepWithIcon(
+                        number: 6,
+                        icon: "calendar.badge.checkmark",
+                        title: "Enable Calendars",
+                        description: "Make sure 'Calendars' is turned ON"
+                    )
+
+                    SetupStepWithIcon(
+                        number: 7,
+                        icon: "arrow.uturn.backward.circle.fill",
+                        title: "Return to Activslot",
+                        description: "Your work calendar will appear automatically!"
+                    )
+                }
+
+                Divider()
+
+                // Open Settings button
+                Button {
+                    if let url = URL(string: "App-prefs:CALENDAR") {
+                        UIApplication.shared.open(url)
+                    } else if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "gear")
+                        Text("Open Settings")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.purple)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                }
+            }
+            .padding()
+        }
+        .navigationTitle("Work Account Setup")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - iCloud Setup Guide
+
+struct ICloudSetupGuideView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                // Header
+                VStack(alignment: .leading, spacing: 8) {
+                    Image(systemName: "icloud.fill")
+                        .font(.system(size: 44))
+                        .foregroundColor(.cyan)
+
+                    Text("iCloud Calendar")
+                        .font(.title2)
+                        .bold()
+
+                    Text("iCloud Calendar syncs automatically when you're signed into iCloud.")
+                        .foregroundColor(.secondary)
+                }
+
+                // Already connected check
+                HStack(spacing: 12) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text("iCloud is typically enabled by default on your iPhone")
+                        .font(.subheadline)
+                }
+                .padding()
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(12)
+
+                Divider()
+
+                Text("Verify iCloud Calendar is Enabled")
+                    .font(.headline)
+
+                VStack(alignment: .leading, spacing: 16) {
+                    SetupStepWithIcon(
+                        number: 1,
+                        icon: "gear",
+                        title: "Open Settings",
+                        description: "Go to your iPhone's Settings app"
+                    )
+
+                    SetupStepWithIcon(
+                        number: 2,
+                        icon: "person.circle.fill",
+                        title: "Tap Your Name",
+                        description: "At the top of Settings, tap your Apple ID"
+                    )
+
+                    SetupStepWithIcon(
+                        number: 3,
+                        icon: "icloud.fill",
+                        title: "iCloud",
+                        description: "Tap 'iCloud'"
+                    )
+
+                    SetupStepWithIcon(
+                        number: 4,
+                        icon: "calendar.badge.checkmark",
+                        title: "Enable Calendars",
+                        description: "Make sure 'Calendars' is toggled ON"
+                    )
+                }
+
+                Divider()
+
+                // Open Settings button
+                Button {
+                    if let url = URL(string: "App-prefs:CASTLE") {
+                        UIApplication.shared.open(url)
+                    } else if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "gear")
+                        Text("Open iCloud Settings")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.cyan)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                }
+            }
+            .padding()
+        }
+        .navigationTitle("iCloud Calendar")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Feedback View
+
+struct FeedbackView: View {
+    @Environment(\.dismiss) var dismiss
+
+    @State private var feedbackType: FeedbackType = .suggestion
+    @State private var feedbackText = ""
+    @State private var userEmail = ""
+    @State private var showSuccessAlert = false
+    @State private var isSending = false
+
+    enum FeedbackType: String, CaseIterable {
+        case suggestion = "Feature Suggestion"
+        case bug = "Bug Report"
+        case praise = "What I Love"
+        case other = "Other"
+
+        var icon: String {
+            switch self {
+            case .suggestion: return "lightbulb.fill"
+            case .bug: return "ladybug.fill"
+            case .praise: return "heart.fill"
+            case .other: return "ellipsis.bubble.fill"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .suggestion: return .yellow
+            case .bug: return .red
+            case .praise: return .pink
+            case .other: return .blue
+            }
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                // Header
+                VStack(alignment: .leading, spacing: 8) {
+                    Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                        .font(.system(size: 44))
+                        .foregroundColor(.purple)
+
+                    Text("Send Feedback")
+                        .font(.title2)
+                        .bold()
+
+                    Text("We'd love to hear from you! Your feedback helps us make Activslot better for busy professionals like you.")
+                        .foregroundColor(.secondary)
+                }
+
+                Divider()
+
+                // Feedback Type Selection
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("What type of feedback?")
+                        .font(.headline)
+
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach(FeedbackType.allCases, id: \.self) { type in
+                            Button {
+                                feedbackType = type
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: type.icon)
+                                        .foregroundColor(feedbackType == type ? .white : type.color)
+                                    Text(type.rawValue)
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(feedbackType == type ? .white : .primary)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(feedbackType == type ? type.color : Color(.secondarySystemBackground))
+                                .cornerRadius(10)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                // Feedback Text
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Your Feedback")
+                        .font(.headline)
+
+                    TextEditor(text: $feedbackText)
+                        .frame(minHeight: 150)
+                        .padding(8)
+                        .background(Color(.secondarySystemBackground))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+
+                    Text("\(feedbackText.count) / 1000 characters")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                // Email (optional)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Email")
+                            .font(.headline)
+                        Text("(optional)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    TextField("your.email@company.com", text: $userEmail)
+                        .textContentType(.emailAddress)
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                        .padding()
+                        .background(Color(.secondarySystemBackground))
+                        .cornerRadius(12)
+
+                    Text("Add your email if you'd like us to follow up on your feedback")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Divider()
+
+                // Submit Options
+                VStack(spacing: 12) {
+                    // Send via Email
+                    Button {
+                        sendFeedbackViaEmail()
+                    } label: {
+                        HStack {
+                            Image(systemName: "envelope.fill")
+                            Text("Send via Email")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.purple)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(feedbackText.isEmpty)
+
+                    // Alternative options
+                    HStack(spacing: 16) {
+                        Button {
+                            openTwitter()
+                        } label: {
+                            HStack {
+                                Image(systemName: "at")
+                                Text("Twitter/X")
+                            }
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color(.secondarySystemBackground))
+                            .foregroundColor(.primary)
+                            .cornerRadius(10)
+                        }
+
+                        Button {
+                            openGitHub()
+                        } label: {
+                            HStack {
+                                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                Text("GitHub")
+                            }
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color(.secondarySystemBackground))
+                            .foregroundColor(.primary)
+                            .cornerRadius(10)
+                        }
+                    }
+
+                    Text("Or reach us on social media / GitHub for public discussions")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding()
+        }
+        .navigationTitle("Feedback")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("Thank You!", isPresented: $showSuccessAlert) {
+            Button("OK") {
+                dismiss()
+            }
+        } message: {
+            Text("Your feedback has been sent. We appreciate you taking the time to help us improve!")
+        }
+    }
+
+    private func sendFeedbackViaEmail() {
+        let subject = "Activslot Feedback: \(feedbackType.rawValue)"
+        let body = """
+        Feedback Type: \(feedbackType.rawValue)
+
+        \(feedbackText)
+
+        ---
+        User Email: \(userEmail.isEmpty ? "Not provided" : userEmail)
+        App Version: 1.0.0
+        Device: \(UIDevice.current.model)
+        iOS: \(UIDevice.current.systemVersion)
+        """
+
+        let encodedSubject = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let encodedBody = body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+
+        if let url = URL(string: "mailto:feedback@activslot.com?subject=\(encodedSubject)&body=\(encodedBody)") {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    private func openTwitter() {
+        if let url = URL(string: "https://twitter.com/activslot") {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    private func openGitHub() {
+        if let url = URL(string: "https://github.com/kashinitiatives/ActivSlot/issues") {
+            UIApplication.shared.open(url)
+        }
+    }
+}
+
 #Preview {
     CalendarSelectionView()
         .environmentObject(CalendarManager.shared)
+}
+
+#Preview("Work Calendar Setup") {
+    NavigationStack {
+        WorkCalendarSetupView()
+            .environmentObject(CalendarManager.shared)
+            .environmentObject(OutlookManager.shared)
+    }
+}
+
+#Preview("Feedback") {
+    NavigationStack {
+        FeedbackView()
+    }
 }

@@ -46,13 +46,18 @@ class AutoWalkManager: ObservableObject {
             let calendarManager = CalendarManager.shared
             let events = try await calendarManager.fetchEvents(for: tomorrow)
 
-            // Filter to real meetings only (exclude OOO, all-day events)
+            // Filter to real meetings only (exclude OOO, all-day events, long meetings)
             let realMeetings = events.filter { $0.isRealMeeting }
 
-            // Find the best walk slot
+            // Get existing scheduled activities for tomorrow (gym workouts, etc.)
+            let scheduledActivityManager = ScheduledActivityManager.shared
+            let existingActivities = scheduledActivityManager.activities(for: tomorrow)
+
+            // Find the best walk slot, avoiding both calendar events and scheduled activities
             guard let walkSlot = findBestWalkSlot(
                 for: tomorrow,
                 events: realMeetings,
+                scheduledActivities: existingActivities,
                 duration: prefs.autoWalkDuration,
                 preferredTime: prefs.autoWalkPreferredTime
             ) else {
@@ -110,6 +115,7 @@ class AutoWalkManager: ObservableObject {
     private func findBestWalkSlot(
         for date: Date,
         events: [CalendarEvent],
+        scheduledActivities: [ScheduledActivity],
         duration: Int,
         preferredTime: PreferredWalkTime
     ) -> DateInterval? {
@@ -119,34 +125,102 @@ class AutoWalkManager: ObservableObject {
         // Define time windows based on preference
         let (preferredStart, preferredEnd) = getTimeWindow(for: preferredTime, on: date)
 
-        // Get all free slots for the day
-        let freeSlots = findFreeSlots(for: date, events: events, minimumDuration: duration)
+        // Get all free slots for the day (considers both calendar events and scheduled activities)
+        let freeSlots = findFreeSlots(
+            for: date,
+            events: events,
+            scheduledActivities: scheduledActivities,
+            minimumDuration: duration
+        )
 
         // Priority 1: Find slot in preferred time window
-        if let slot = freeSlots.first(where: { slot in
+        let slotsInPreferredWindow = freeSlots.filter { slot in
             slot.start >= preferredStart &&
-            slot.end <= preferredEnd &&
+            slot.start < preferredEnd &&
             slot.duration >= Double(duration * 60) &&
             !prefs.isDuringMeal(slot.start)
-        }) {
+        }
+
+        if let slot = slotsInPreferredWindow.first {
             return DateInterval(
                 start: slot.start,
                 end: calendar.date(byAdding: .minute, value: duration, to: slot.start) ?? slot.end
             )
         }
 
-        // Priority 2: Find any slot that works, preferring earlier times
-        let sortedSlots = freeSlots.sorted { $0.start < $1.start }
-        for slot in sortedSlots {
-            if slot.duration >= Double(duration * 60) && !prefs.isDuringMeal(slot.start) {
-                return DateInterval(
-                    start: slot.start,
-                    end: calendar.date(byAdding: .minute, value: duration, to: slot.start) ?? slot.end
-                )
+        // Priority 2: Find slot in adjacent time windows based on preference
+        // For evening preference, try afternoon; for morning, try midday
+        let (fallbackStart, fallbackEnd) = getFallbackTimeWindow(for: preferredTime, on: date)
+        let slotsInFallbackWindow = freeSlots.filter { slot in
+            slot.start >= fallbackStart &&
+            slot.start < fallbackEnd &&
+            slot.duration >= Double(duration * 60) &&
+            !prefs.isDuringMeal(slot.start)
+        }
+
+        if let slot = slotsInFallbackWindow.first {
+            return DateInterval(
+                start: slot.start,
+                end: calendar.date(byAdding: .minute, value: duration, to: slot.start) ?? slot.end
+            )
+        }
+
+        // Priority 3: Only if no preference set, use any available slot
+        if preferredTime == .noPreference {
+            let sortedSlots = freeSlots.sorted { $0.start < $1.start }
+            for slot in sortedSlots {
+                if slot.duration >= Double(duration * 60) && !prefs.isDuringMeal(slot.start) {
+                    return DateInterval(
+                        start: slot.start,
+                        end: calendar.date(byAdding: .minute, value: duration, to: slot.start) ?? slot.end
+                    )
+                }
             }
         }
 
         return nil
+    }
+
+    /// Get fallback time window based on preference
+    private func getFallbackTimeWindow(for preference: PreferredWalkTime, on date: Date) -> (start: Date, end: Date) {
+        let calendar = Calendar.current
+        var startComponents = calendar.dateComponents([.year, .month, .day], from: date)
+        var endComponents = calendar.dateComponents([.year, .month, .day], from: date)
+
+        switch preference {
+        case .morning:
+            // Fallback to late morning / early afternoon
+            startComponents.hour = 11
+            startComponents.minute = 0
+            endComponents.hour = 14
+            endComponents.minute = 0
+
+        case .afternoon:
+            // Fallback to late afternoon / early evening
+            startComponents.hour = 16
+            startComponents.minute = 0
+            endComponents.hour = 19
+            endComponents.minute = 0
+
+        case .evening:
+            // Fallback to late afternoon
+            startComponents.hour = 15
+            startComponents.minute = 0
+            endComponents.hour = 18
+            endComponents.minute = 0
+
+        case .noPreference:
+            // No fallback needed
+            startComponents.hour = 0
+            startComponents.minute = 0
+            endComponents.hour = 0
+            endComponents.minute = 0
+        }
+
+        let start = calendar.date(from: startComponents) ?? date
+        let end = calendar.date(from: endComponents) ?? date
+
+        return (start, end)
     }
 
     /// Get time window based on preference
@@ -188,8 +262,13 @@ class AutoWalkManager: ObservableObject {
         return (start, end)
     }
 
-    /// Find free slots in the day avoiding meetings
-    private func findFreeSlots(for date: Date, events: [CalendarEvent], minimumDuration: Int) -> [DateInterval] {
+    /// Find free slots in the day avoiding meetings and scheduled activities
+    private func findFreeSlots(
+        for date: Date,
+        events: [CalendarEvent],
+        scheduledActivities: [ScheduledActivity],
+        minimumDuration: Int
+    ) -> [DateInterval] {
         let calendar = Calendar.current
         let prefs = UserPreferences.shared
 
@@ -205,31 +284,46 @@ class AutoWalkManager: ObservableObject {
         endComponents.minute = 0
         let dayEnd = calendar.date(from: endComponents) ?? date
 
-        // Sort events by start time
-        let sortedEvents = events.sorted { $0.startDate < $1.startDate }
+        // Combine calendar events and scheduled activities into busy intervals
+        var busyIntervals: [(start: Date, end: Date)] = []
+
+        // Add calendar events
+        for event in events {
+            busyIntervals.append((start: event.startDate, end: event.endDate))
+        }
+
+        // Add scheduled activities (gym workouts, walks, etc.)
+        for activity in scheduledActivities {
+            if let timeRange = activity.getTimeRange(for: date) {
+                busyIntervals.append((start: timeRange.start, end: timeRange.end))
+            }
+        }
+
+        // Sort by start time
+        busyIntervals.sort { $0.start < $1.start }
 
         var freeSlots: [DateInterval] = []
         var currentTime = dayStart
 
-        for event in sortedEvents {
-            // Skip events outside our window
-            if event.endDate <= dayStart || event.startDate >= dayEnd {
+        for interval in busyIntervals {
+            // Skip intervals outside our window
+            if interval.end <= dayStart || interval.start >= dayEnd {
                 continue
             }
 
-            let eventStart = max(event.startDate, dayStart)
-            let eventEnd = min(event.endDate, dayEnd)
+            let intervalStart = max(interval.start, dayStart)
+            let intervalEnd = min(interval.end, dayEnd)
 
-            if eventStart > currentTime {
-                let gap = DateInterval(start: currentTime, end: eventStart)
+            if intervalStart > currentTime {
+                let gap = DateInterval(start: currentTime, end: intervalStart)
                 let gapMinutes = Int(gap.duration / 60)
                 if gapMinutes >= minimumDuration {
                     freeSlots.append(gap)
                 }
             }
 
-            if eventEnd > currentTime {
-                currentTime = eventEnd
+            if intervalEnd > currentTime {
+                currentTime = intervalEnd
             }
         }
 

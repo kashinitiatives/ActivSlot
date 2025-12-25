@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 
 struct SettingsView: View {
     @EnvironmentObject var userPreferences: UserPreferences
@@ -87,80 +88,91 @@ struct SettingsView: View {
                     Text("Walk suggestions are avoided during meal times")
                 }
 
-                // Outlook Calendar Section
+                // Work Calendar Section - Generic for all providers
                 Section {
-                    if outlookManager.isSignedIn {
-                        HStack {
-                            Image(systemName: "envelope.fill")
-                                .foregroundColor(.blue)
-                                .frame(width: 28)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Outlook Connected")
-                                    .font(.subheadline)
-                                if let email = outlookManager.userEmail {
-                                    Text(email)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                        }
-
-                        Button(role: .destructive) {
-                            Task {
-                                await outlookManager.signOut()
-                            }
-                        } label: {
-                            Text("Sign Out of Outlook")
-                        }
-                    } else {
-                        Button {
-                            Task {
-                                do {
-                                    try await outlookManager.signIn()
-                                } catch OutlookError.userCancelled {
-                                    // User cancelled
-                                } catch OutlookError.notConfigured {
-                                    outlookErrorMessage = "Outlook integration needs to be configured."
-                                    showOutlookError = true
-                                } catch {
-                                    outlookErrorMessage = error.localizedDescription
-                                    showOutlookError = true
-                                }
-                            }
-                        } label: {
+                    // Show connected work calendars
+                    if calendarManager.hasOutlookCalendar || calendarManager.hasGoogleCalendar || outlookManager.isSignedIn {
+                        if outlookManager.isSignedIn {
                             HStack {
                                 Image(systemName: "envelope.fill")
                                     .foregroundColor(.blue)
                                     .frame(width: 28)
-
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Connect Outlook Calendar")
+                                    Text("Outlook Connected")
                                         .font(.subheadline)
-                                    Text("Sign in with your work account")
+                                    if let email = outlookManager.userEmail {
+                                        Text(email)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                            }
+                        }
+
+                        if calendarManager.hasOutlookCalendar && !outlookManager.isSignedIn {
+                            HStack {
+                                Image(systemName: "envelope.fill")
+                                    .foregroundColor(.blue)
+                                    .frame(width: 28)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Outlook via iOS")
+                                        .font(.subheadline)
+                                    Text("Synced through iOS Calendar")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
-
                                 Spacer()
-
-                                if outlookManager.isLoading {
-                                    ProgressView()
-                                } else {
-                                    Image(systemName: "chevron.right")
-                                        .foregroundColor(.secondary)
-                                }
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
                             }
                         }
-                        .disabled(outlookManager.isLoading)
+
+                        if calendarManager.hasGoogleCalendar {
+                            HStack {
+                                Image(systemName: "g.circle.fill")
+                                    .foregroundColor(.red)
+                                    .frame(width: 28)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Google Calendar")
+                                        .font(.subheadline)
+                                    Text("Synced through iOS Calendar")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                            }
+                        }
+                    }
+
+                    // Add work calendar options
+                    NavigationLink {
+                        WorkCalendarSetupView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(.blue)
+                                .frame(width: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Connect Work Calendar")
+                                    .font(.subheadline)
+                                Text("Outlook, Google, Exchange, or other SSO")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(.secondary)
+                        }
                     }
                 } header: {
                     Text("Work Calendar")
+                } footer: {
+                    Text("Connect your work calendar to see meetings and find walking opportunities")
                 }
 
                 // iOS Calendars Section
@@ -170,7 +182,7 @@ struct SettingsView: View {
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Manage iOS Calendars")
+                                Text("Manage All Calendars")
                                     .foregroundColor(.primary)
 
                                 if calendarManager.isAuthorized {
@@ -193,7 +205,9 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("iOS Calendars")
+                    Text("Calendar Selection")
+                } footer: {
+                    Text("Choose which calendars to include when finding walking opportunities")
                 }
 
                 // Calendar Sync Section
@@ -207,16 +221,16 @@ struct SettingsView: View {
                                 .frame(width: 28)
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Calendar Sync")
+                                Text("Export to Calendar")
                                     .foregroundColor(.primary)
-                                Text("Sync fitness plans to external calendars")
+                                Text("Add fitness plans to your calendar")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
                         }
                     }
                 } header: {
-                    Text("Sync Settings")
+                    Text("Export Settings")
                 } footer: {
                     Text("Add your walk breaks and workouts to Google, iCloud, or Outlook calendars")
                 }
@@ -551,6 +565,42 @@ struct SettingsView: View {
                     Text("Permissions")
                 }
 
+                // Feedback & Support
+                Section {
+                    NavigationLink {
+                        FeedbackView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                                .foregroundColor(.purple)
+                                .frame(width: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Send Feedback")
+                                    .foregroundColor(.primary)
+                                Text("Help us improve Activslot")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+
+                    Button {
+                        requestAppStoreReview()
+                    } label: {
+                        HStack {
+                            Image(systemName: "star.fill")
+                                .foregroundColor(.yellow)
+                                .frame(width: 28)
+                            Text("Rate on App Store")
+                                .foregroundColor(.primary)
+                        }
+                    }
+                } header: {
+                    Text("Feedback & Support")
+                } footer: {
+                    Text("Your feedback helps us build a better app for busy professionals")
+                }
+
                 // About
                 Section {
                     HStack {
@@ -598,6 +648,12 @@ struct SettingsView: View {
         breakfastTime = userPreferences.breakfastTime.date
         lunchTime = userPreferences.lunchTime.date
         dinnerTime = userPreferences.dinnerTime.date
+    }
+
+    private func requestAppStoreReview() {
+        if let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
+            SKStoreReviewController.requestReview(in: scene)
+        }
     }
 }
 

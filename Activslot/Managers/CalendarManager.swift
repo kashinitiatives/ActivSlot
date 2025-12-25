@@ -390,6 +390,15 @@ class CalendarManager: ObservableObject {
         }
     }
 
+    var hasICloudCalendar: Bool {
+        if availableCalendars.contains(where: { $0.sourceType == .icloud }) {
+            return true
+        }
+        return eventStore.sources.contains { source in
+            source.title.lowercased().contains("icloud")
+        }
+    }
+
     var connectedSources: [String] {
         var sources: [String] = []
         if hasOutlookCalendar { sources.append("Outlook") }
@@ -435,6 +444,28 @@ class CalendarManager: ObservableObject {
         }
     }
 
+    /// Refresh all calendar events (called when app returns to foreground)
+    func refreshEvents() async {
+        guard isAuthorized else { return }
+
+        do {
+            // Refresh available calendars list
+            await MainActor.run {
+                loadAvailableCalendars()
+            }
+
+            // Fetch today and tomorrow events in parallel
+            async let todayTask: () = fetchTodayEvents()
+            async let tomorrowTask: () = fetchTomorrowEvents()
+
+            _ = try await (todayTask, tomorrowTask)
+
+            print("Calendar events refreshed successfully")
+        } catch {
+            print("Error refreshing calendar events: \(error)")
+        }
+    }
+
     // MARK: - Walkable Meetings
 
     func getWalkableMeetings(for date: Date) async throws -> [CalendarEvent] {
@@ -454,8 +485,11 @@ class CalendarManager: ObservableObject {
     // MARK: - Find Free Slots
 
     func findFreeSlots(for date: Date, minimumDuration: Int = 45) async throws -> [DateInterval] {
-        let events = try await fetchEvents(for: date)
+        let allEvents = try await fetchEvents(for: date)
         let calendar = Calendar.current
+
+        // Filter out events that should be excluded from scheduling (all-day, OOO, long meetings)
+        let events = allEvents.filter { !$0.shouldExcludeFromScheduling }
 
         // Define working hours (7 AM to 10 PM)
         var startComponents = calendar.dateComponents([.year, .month, .day], from: date)
@@ -503,7 +537,8 @@ class CalendarManager: ObservableObject {
 
     func getMeetingLoad(for date: Date) async throws -> Int {
         let events = try await fetchEvents(for: date)
-        return events.reduce(0) { $0 + $1.duration }
+        // Only count real meetings (exclude all-day, OOO, long meetings)
+        return events.filter { $0.isRealMeeting }.reduce(0) { $0 + $1.duration }
     }
 
     func isDayHeavyWithMeetings(for date: Date, threshold: Int = 360) async throws -> Bool {
