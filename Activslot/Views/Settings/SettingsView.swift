@@ -426,6 +426,75 @@ struct SettingsView: View {
                     }
                 }
 
+                // Full Autopilot Mode
+                Section {
+                    NavigationLink {
+                        AutopilotSettingsView()
+                            .environmentObject(userPreferences)
+                            .environmentObject(calendarManager)
+                    } label: {
+                        HStack {
+                            Image(systemName: "bolt.fill")
+                                .foregroundColor(.yellow)
+                                .frame(width: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Autopilot Mode")
+                                    .foregroundColor(.primary)
+                                Text(userPreferences.autopilotEnabled ? "Active" : "Off")
+                                    .font(.caption)
+                                    .foregroundColor(userPreferences.autopilotEnabled ? .green : .secondary)
+                            }
+                            Spacer()
+                            if userPreferences.autopilotEnabled {
+                                Text(userPreferences.autopilotTrustLevel.displayName)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Invisible Fitness")
+                } footer: {
+                    Text("Let the app schedule your walks automatically. Zero decisions needed.")
+                }
+
+                // Your Journey / Identity
+                Section {
+                    NavigationLink {
+                        IdentityProfileView()
+                            .environmentObject(userPreferences)
+                    } label: {
+                        HStack {
+                            Image(systemName: userPreferences.identityLevel.icon)
+                                .foregroundColor(.purple)
+                                .frame(width: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Your Journey")
+                                    .foregroundColor(.primary)
+                                Text(userPreferences.identityLevel.title)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            if userPreferences.currentStreak > 0 {
+                                HStack(spacing: 4) {
+                                    Text("\(userPreferences.currentStreak)")
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                    Image(systemName: "flame.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Progress")
+                } footer: {
+                    let total = userPreferences.totalWalksCompleted + userPreferences.totalWorkoutsCompleted
+                    Text("\(total) total activities completed")
+                }
+
                 // Notifications
                 Section {
                     if notificationManager.isAuthorized {

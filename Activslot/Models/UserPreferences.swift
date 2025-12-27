@@ -3,6 +3,163 @@ import SwiftUI
 
 // MARK: - Enums
 
+// MARK: Autopilot Trust Level
+enum AutopilotTrustLevel: String, CaseIterable, Codable {
+    case fullAuto = "fullAuto"           // Schedule without asking
+    case confirmFirst = "confirmFirst"    // Send notification to approve
+    case suggestOnly = "suggestOnly"      // Just show in app, don't create events
+
+    var displayName: String {
+        switch self {
+        case .fullAuto: return "Full Autopilot"
+        case .confirmFirst: return "Ask Me First"
+        case .suggestOnly: return "Suggest Only"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .fullAuto: return "Walks appear on your calendar automatically"
+        case .confirmFirst: return "Get a notification to approve each walk"
+        case .suggestOnly: return "See suggestions in app, schedule manually"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .fullAuto: return "bolt.fill"
+        case .confirmFirst: return "bell.badge.fill"
+        case .suggestOnly: return "lightbulb.fill"
+        }
+    }
+}
+
+// MARK: Personal Why (Motivation Anchors)
+enum PersonalWhy: String, CaseIterable, Codable {
+    case energy = "energy"               // More energy throughout the day
+    case longevity = "longevity"         // Live longer, healthier
+    case mentalClarity = "mentalClarity" // Better focus and thinking
+    case stressRelief = "stressRelief"   // Reduce stress and anxiety
+    case familyTime = "familyTime"       // Be active for family
+    case backPain = "backPain"           // Reduce back/body pain
+    case weightManagement = "weight"     // Manage weight
+    case sleepBetter = "sleep"           // Sleep better at night
+    case custom = "custom"               // Custom reason
+
+    var displayName: String {
+        switch self {
+        case .energy: return "More Energy"
+        case .longevity: return "Live Longer"
+        case .mentalClarity: return "Mental Clarity"
+        case .stressRelief: return "Stress Relief"
+        case .familyTime: return "Family Time"
+        case .backPain: return "Reduce Pain"
+        case .weightManagement: return "Weight Management"
+        case .sleepBetter: return "Better Sleep"
+        case .custom: return "My Own Reason"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .energy: return "bolt.fill"
+        case .longevity: return "heart.fill"
+        case .mentalClarity: return "brain.head.profile"
+        case .stressRelief: return "leaf.fill"
+        case .familyTime: return "figure.2.and.child.holdinghands"
+        case .backPain: return "figure.stand"
+        case .weightManagement: return "scalemass.fill"
+        case .sleepBetter: return "moon.zzz.fill"
+        case .custom: return "star.fill"
+        }
+    }
+
+    var motivationalMessage: String {
+        switch self {
+        case .energy: return "This walk = more energy for your afternoon"
+        case .longevity: return "Every walk adds minutes to your life"
+        case .mentalClarity: return "Walking boosts focus for your next meeting"
+        case .stressRelief: return "A quick walk melts away stress"
+        case .familyTime: return "Stay active for the ones you love"
+        case .backPain: return "Movement is medicine for your body"
+        case .weightManagement: return "Every step counts toward your goal"
+        case .sleepBetter: return "Today's walks = tonight's better sleep"
+        case .custom: return "You've got this!"
+        }
+    }
+}
+
+// MARK: Identity Levels
+enum IdentityLevel: Int, CaseIterable, Codable {
+    case newcomer = 0      // 0-4 activities
+    case beginner = 1      // 5-19 activities
+    case explorer = 2      // 20-49 activities
+    case committed = 3     // 50-99 activities
+    case champion = 4      // 100-199 activities
+    case master = 5        // 200-499 activities
+    case legend = 6        // 500+ activities
+
+    var title: String {
+        switch self {
+        case .newcomer: return "Newcomer"
+        case .beginner: return "Beginner Mover"
+        case .explorer: return "Active Explorer"
+        case .committed: return "Committed Walker"
+        case .champion: return "Movement Champion"
+        case .master: return "Fitness Master"
+        case .legend: return "Walking Legend"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .newcomer: return "Starting your journey"
+        case .beginner: return "Building the habit"
+        case .explorer: return "Finding your rhythm"
+        case .committed: return "Movement is part of you"
+        case .champion: return "Inspiring others"
+        case .master: return "Leading by example"
+        case .legend: return "A true role model"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .newcomer: return "leaf.fill"
+        case .beginner: return "figure.walk"
+        case .explorer: return "figure.run"
+        case .committed: return "flame.fill"
+        case .champion: return "trophy.fill"
+        case .master: return "crown.fill"
+        case .legend: return "star.circle.fill"
+        }
+    }
+
+    var nextLevel: IdentityLevel? {
+        switch self {
+        case .newcomer: return .beginner
+        case .beginner: return .explorer
+        case .explorer: return .committed
+        case .committed: return .champion
+        case .champion: return .master
+        case .master: return .legend
+        case .legend: return nil
+        }
+    }
+
+    var activitiesRequired: Int {
+        switch self {
+        case .newcomer: return 0
+        case .beginner: return 5
+        case .explorer: return 20
+        case .committed: return 50
+        case .champion: return 100
+        case .master: return 200
+        case .legend: return 500
+        }
+    }
+}
+
 enum GymFrequency: Int, CaseIterable, Codable {
     case none = 0
     case threeDays = 3
@@ -145,6 +302,94 @@ class UserPreferences: ObservableObject {
     var autoWalkPreferredTime: PreferredWalkTime {
         get { PreferredWalkTime(rawValue: autoWalkPreferredTimeRaw) ?? .morning }
         set { autoWalkPreferredTimeRaw = newValue.rawValue }
+    }
+
+    // MARK: - Full Autopilot Mode
+    @AppStorage("autopilotEnabled") var autopilotEnabled: Bool = false
+    @AppStorage("autopilotTrustLevel") var autopilotTrustLevelRaw: String = "confirmFirst"
+    @AppStorage("autopilotWalksPerDay") var autopilotWalksPerDay: Int = 2
+    @AppStorage("autopilotMinWalkDuration") var autopilotMinWalkDuration: Int = 5  // Micro walks
+    @AppStorage("autopilotMaxWalkDuration") var autopilotMaxWalkDuration: Int = 30
+    @AppStorage("autopilotIncludeMicroWalks") var autopilotIncludeMicroWalks: Bool = true
+    @AppStorage("autopilotCalendarID") var autopilotCalendarID: String = ""
+
+    var autopilotTrustLevel: AutopilotTrustLevel {
+        get { AutopilotTrustLevel(rawValue: autopilotTrustLevelRaw) ?? .confirmFirst }
+        set { autopilotTrustLevelRaw = newValue.rawValue }
+    }
+
+    // MARK: - Personal Why (Motivation)
+    @AppStorage("personalWhyRaw") var personalWhyRaw: String = ""
+    @AppStorage("personalWhyCustom") var personalWhyCustom: String = ""
+
+    var personalWhy: PersonalWhy? {
+        get { PersonalWhy(rawValue: personalWhyRaw) }
+        set { personalWhyRaw = newValue?.rawValue ?? "" }
+    }
+
+    // MARK: - Identity & Progression
+    @AppStorage("totalWalksCompleted") var totalWalksCompleted: Int = 0
+    @AppStorage("totalWorkoutsCompleted") var totalWorkoutsCompleted: Int = 0
+    @AppStorage("currentStreak") var currentStreak: Int = 0
+    @AppStorage("longestStreak") var longestStreak: Int = 0
+    @AppStorage("lastActivityDateString") var lastActivityDateString: String = ""
+    @AppStorage("identityLevel") var identityLevelRaw: Int = 0
+
+    var identityLevel: IdentityLevel {
+        IdentityLevel(rawValue: identityLevelRaw) ?? .newcomer
+    }
+
+    func recordActivityCompleted(isWalk: Bool) {
+        let today = formatDateString(Date())
+
+        if isWalk {
+            totalWalksCompleted += 1
+        } else {
+            totalWorkoutsCompleted += 1
+        }
+
+        // Update streak
+        if lastActivityDateString == formatDateString(Calendar.current.date(byAdding: .day, value: -1, to: Date())!) {
+            // Continued streak
+            currentStreak += 1
+        } else if lastActivityDateString != today {
+            // Streak broken or first activity
+            currentStreak = 1
+        }
+
+        if currentStreak > longestStreak {
+            longestStreak = currentStreak
+        }
+
+        lastActivityDateString = today
+
+        // Update identity level
+        updateIdentityLevel()
+    }
+
+    private func updateIdentityLevel() {
+        let total = totalWalksCompleted + totalWorkoutsCompleted
+        if total >= 500 {
+            identityLevelRaw = IdentityLevel.legend.rawValue
+        } else if total >= 200 {
+            identityLevelRaw = IdentityLevel.master.rawValue
+        } else if total >= 100 {
+            identityLevelRaw = IdentityLevel.champion.rawValue
+        } else if total >= 50 {
+            identityLevelRaw = IdentityLevel.committed.rawValue
+        } else if total >= 20 {
+            identityLevelRaw = IdentityLevel.explorer.rawValue
+        } else if total >= 5 {
+            identityLevelRaw = IdentityLevel.beginner.rawValue
+        } else {
+            identityLevelRaw = IdentityLevel.newcomer.rawValue
+        }
+    }
+
+    private func formatDateString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
 
     // MARK: - Computed Properties

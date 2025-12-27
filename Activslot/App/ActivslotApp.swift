@@ -51,6 +51,7 @@ struct ActivslotApp: App {
             Task {
                 await NotificationManager.shared.refreshDailyNotifications()
                 await AutoWalkManager.shared.scheduleAutoWalkForTomorrow()
+                await AutopilotManager.shared.scheduleWalksForTomorrow()
             }
 
         case .inactive:

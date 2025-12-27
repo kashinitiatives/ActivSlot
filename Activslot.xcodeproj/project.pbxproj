@@ -35,6 +35,10 @@
 		72C9428FDDDD0001CAFBCC /* ScheduledActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */; };
 		72C94291DDDD0002CAFBCC /* ScheduleActivitySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94292DDDD0002CAFBCC /* ScheduleActivitySheet.swift */; };
 		72C94293EEEE0001CAFBCC /* AutoWalkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94294EEEE0001CAFBCC /* AutoWalkManager.swift */; };
+		72C94295FFFF0001CAFBCC /* AutopilotManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94296FFFF0001CAFBCC /* AutopilotManager.swift */; };
+		72C94297FFFF0002CAFBCC /* PersonalWhyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94298FFFF0002CAFBCC /* PersonalWhyView.swift */; };
+		72C94299FFFF0003CAFBCC /* IdentityProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C9429AFFFF0003CAFBCC /* IdentityProfileView.swift */; };
+		72C9429BFFFF0004CAFBCC /* AutopilotSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C9429CFFFF0004CAFBCC /* AutopilotSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -68,6 +72,10 @@
 		72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledActivityManager.swift; sourceTree = "<group>"; };
 		72C94292DDDD0002CAFBCC /* ScheduleActivitySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleActivitySheet.swift; sourceTree = "<group>"; };
 		72C94294EEEE0001CAFBCC /* AutoWalkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoWalkManager.swift; sourceTree = "<group>"; };
+		72C94296FFFF0001CAFBCC /* AutopilotManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutopilotManager.swift; sourceTree = "<group>"; };
+		72C94298FFFF0002CAFBCC /* PersonalWhyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalWhyView.swift; sourceTree = "<group>"; };
+		72C9429AFFFF0003CAFBCC /* IdentityProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityProfileView.swift; sourceTree = "<group>"; };
+		72C9429CFFFF0004CAFBCC /* AutopilotSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutopilotSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -125,6 +133,7 @@
 				72C9428ECCCC0004CAFBCC /* CalendarSyncService.swift */,
 				72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */,
 				72C94294EEEE0001CAFBCC /* AutoWalkManager.swift */,
+				72C94296FFFF0001CAFBCC /* AutopilotManager.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -148,8 +157,17 @@
 				001A00078 /* Calendar */,
 				001A00076 /* Onboarding */,
 				001A00077 /* Settings */,
+				72C9429DFFFF0005CAFBCC /* Profile */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		72C9429DFFFF0005CAFBCC /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				72C9429AFFFF0003CAFBCC /* IdentityProfileView.swift */,
+			);
+			path = Profile;
 			sourceTree = "<group>";
 		};
 		001A00078 /* Calendar */ = {
@@ -177,6 +195,7 @@
 				001A00017 /* ValuePropositionView.swift */,
 				001A00018 /* PermissionsView.swift */,
 				001A00019 /* PreferencesView.swift */,
+				72C94298FFFF0002CAFBCC /* PersonalWhyView.swift */,
 			);
 			path = Onboarding;
 			sourceTree = "<group>";
@@ -186,6 +205,7 @@
 			children = (
 				001A00015 /* SettingsView.swift */,
 				72C9427E2EF86B0100CAFBCC /* CalendarSelectionView 2.swift */,
+				72C9429CFFFF0004CAFBCC /* AutopilotSettingsView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -299,6 +319,10 @@
 				72C9428FDDDD0001CAFBCC /* ScheduledActivityManager.swift in Sources */,
 				72C94291DDDD0002CAFBCC /* ScheduleActivitySheet.swift in Sources */,
 				72C94293EEEE0001CAFBCC /* AutoWalkManager.swift in Sources */,
+				72C94295FFFF0001CAFBCC /* AutopilotManager.swift in Sources */,
+				72C94297FFFF0002CAFBCC /* PersonalWhyView.swift in Sources */,
+				72C94299FFFF0003CAFBCC /* IdentityProfileView.swift in Sources */,
+				72C9429BFFFF0004CAFBCC /* AutopilotSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
