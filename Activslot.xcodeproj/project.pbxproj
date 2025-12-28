@@ -34,7 +34,6 @@
 		72C9428DCCCC0004CAFBCC /* CalendarSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C9428ECCCC0004CAFBCC /* CalendarSyncService.swift */; };
 		72C9428FDDDD0001CAFBCC /* ScheduledActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */; };
 		72C94291DDDD0002CAFBCC /* ScheduleActivitySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94292DDDD0002CAFBCC /* ScheduleActivitySheet.swift */; };
-		72C94293EEEE0001CAFBCC /* AutoWalkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94294EEEE0001CAFBCC /* AutoWalkManager.swift */; };
 		72C94295FFFF0001CAFBCC /* AutopilotManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94296FFFF0001CAFBCC /* AutopilotManager.swift */; };
 		72C94297FFFF0002CAFBCC /* PersonalWhyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94298FFFF0002CAFBCC /* PersonalWhyView.swift */; };
 		72C94299FFFF0003CAFBCC /* IdentityProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C9429AFFFF0003CAFBCC /* IdentityProfileView.swift */; };
@@ -71,7 +70,6 @@
 		72C9428ECCCC0004CAFBCC /* CalendarSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSyncService.swift; sourceTree = "<group>"; };
 		72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledActivityManager.swift; sourceTree = "<group>"; };
 		72C94292DDDD0002CAFBCC /* ScheduleActivitySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleActivitySheet.swift; sourceTree = "<group>"; };
-		72C94294EEEE0001CAFBCC /* AutoWalkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoWalkManager.swift; sourceTree = "<group>"; };
 		72C94296FFFF0001CAFBCC /* AutopilotManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutopilotManager.swift; sourceTree = "<group>"; };
 		72C94298FFFF0002CAFBCC /* PersonalWhyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalWhyView.swift; sourceTree = "<group>"; };
 		72C9429AFFFF0003CAFBCC /* IdentityProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityProfileView.swift; sourceTree = "<group>"; };
@@ -132,7 +130,6 @@
 				72C94286BBBB0001CAFBCC /* PersonalInsightsManager.swift */,
 				72C9428ECCCC0004CAFBCC /* CalendarSyncService.swift */,
 				72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */,
-				72C94294EEEE0001CAFBCC /* AutoWalkManager.swift */,
 				72C94296FFFF0001CAFBCC /* AutopilotManager.swift */,
 			);
 			path = Managers;
@@ -318,7 +315,6 @@
 				72C9428DCCCC0004CAFBCC /* CalendarSyncService.swift in Sources */,
 				72C9428FDDDD0001CAFBCC /* ScheduledActivityManager.swift in Sources */,
 				72C94291DDDD0002CAFBCC /* ScheduleActivitySheet.swift in Sources */,
-				72C94293EEEE0001CAFBCC /* AutoWalkManager.swift in Sources */,
 				72C94295FFFF0001CAFBCC /* AutopilotManager.swift in Sources */,
 				72C94297FFFF0002CAFBCC /* PersonalWhyView.swift in Sources */,
 				72C94299FFFF0003CAFBCC /* IdentityProfileView.swift in Sources */,

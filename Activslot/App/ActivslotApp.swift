@@ -41,16 +41,15 @@ struct ActivslotApp: App {
                 // Regenerate movement plans with updated calendar data
                 await MovementPlanManager.shared.generatePlans()
 
-                // Refresh daily notifications and auto walk scheduling
+                // Refresh daily notifications and autopilot scheduling
                 await NotificationManager.shared.refreshDailyNotifications()
-                await AutoWalkManager.shared.scheduleAutoWalkForTomorrow()
+                await AutopilotManager.shared.scheduleWalksForTomorrow()
             }
 
         case .background:
-            // App went to background - good time to schedule notifications and auto walk
+            // App went to background - good time to schedule notifications and autopilot walks
             Task {
                 await NotificationManager.shared.refreshDailyNotifications()
-                await AutoWalkManager.shared.scheduleAutoWalkForTomorrow()
                 await AutopilotManager.shared.scheduleWalksForTomorrow()
             }
 
