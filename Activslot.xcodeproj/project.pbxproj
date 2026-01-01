@@ -38,6 +38,9 @@
 		72C94297FFFF0002CAFBCC /* PersonalWhyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C94298FFFF0002CAFBCC /* PersonalWhyView.swift */; };
 		72C94299FFFF0003CAFBCC /* IdentityProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C9429AFFFF0003CAFBCC /* IdentityProfileView.swift */; };
 		72C9429BFFFF0004CAFBCC /* AutopilotSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C9429CFFFF0004CAFBCC /* AutopilotSettingsView.swift */; };
+		72C9429DAAAA0001CAFBCC /* SmartPlannerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C9429EAAAA0001CAFBCC /* SmartPlannerEngine.swift */; };
+		72C9429FAAAA0002CAFBCC /* SmartPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C942A0AAAA0002CAFBCC /* SmartPlanView.swift */; };
+		72C942A1AAAA0003CAFBCC /* SmartPlanningSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C942A2AAAA0003CAFBCC /* SmartPlanningSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -74,6 +77,9 @@
 		72C94298FFFF0002CAFBCC /* PersonalWhyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalWhyView.swift; sourceTree = "<group>"; };
 		72C9429AFFFF0003CAFBCC /* IdentityProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityProfileView.swift; sourceTree = "<group>"; };
 		72C9429CFFFF0004CAFBCC /* AutopilotSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutopilotSettingsView.swift; sourceTree = "<group>"; };
+		72C9429EAAAA0001CAFBCC /* SmartPlannerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartPlannerEngine.swift; sourceTree = "<group>"; };
+		72C942A0AAAA0002CAFBCC /* SmartPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartPlanView.swift; sourceTree = "<group>"; };
+		72C942A2AAAA0003CAFBCC /* SmartPlanningSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartPlanningSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -131,6 +137,7 @@
 				72C9428ECCCC0004CAFBCC /* CalendarSyncService.swift */,
 				72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */,
 				72C94296FFFF0001CAFBCC /* AutopilotManager.swift */,
+				72C9429EAAAA0001CAFBCC /* SmartPlannerEngine.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -155,8 +162,17 @@
 				001A00076 /* Onboarding */,
 				001A00077 /* Settings */,
 				72C9429DFFFF0005CAFBCC /* Profile */,
+				72C942A3AAAA0004CAFBCC /* SmartPlan */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		72C942A3AAAA0004CAFBCC /* SmartPlan */ = {
+			isa = PBXGroup;
+			children = (
+				72C942A0AAAA0002CAFBCC /* SmartPlanView.swift */,
+			);
+			path = SmartPlan;
 			sourceTree = "<group>";
 		};
 		72C9429DFFFF0005CAFBCC /* Profile */ = {
@@ -203,6 +219,7 @@
 				001A00015 /* SettingsView.swift */,
 				72C9427E2EF86B0100CAFBCC /* CalendarSelectionView 2.swift */,
 				72C9429CFFFF0004CAFBCC /* AutopilotSettingsView.swift */,
+				72C942A2AAAA0003CAFBCC /* SmartPlanningSettingsView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -319,6 +336,9 @@
 				72C94297FFFF0002CAFBCC /* PersonalWhyView.swift in Sources */,
 				72C94299FFFF0003CAFBCC /* IdentityProfileView.swift in Sources */,
 				72C9429BFFFF0004CAFBCC /* AutopilotSettingsView.swift in Sources */,
+				72C9429DAAAA0001CAFBCC /* SmartPlannerEngine.swift in Sources */,
+				72C9429FAAAA0002CAFBCC /* SmartPlanView.swift in Sources */,
+				72C942A1AAAA0003CAFBCC /* SmartPlanningSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

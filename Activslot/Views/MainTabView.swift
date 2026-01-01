@@ -8,56 +8,64 @@ struct MainTabView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selectedTab) {
-                HomeView(resetToTodayTrigger: homeTodayTapCount)
+                // Smart Plan - The main view for intelligent daily planning
+                SmartPlanView()
                     .tabItem {
-                        Image(systemName: "house.fill")
-                        Text("Today")
+                        Image(systemName: "brain.head.profile")
+                        Text("My Plan")
                     }
                     .tag(0)
+
+                HomeView(resetToTodayTrigger: homeTodayTapCount)
+                    .tabItem {
+                        Image(systemName: "figure.walk")
+                        Text("Activity")
+                    }
+                    .tag(1)
 
                 ActivslotCalendarView(resetToTodayTrigger: calendarTodayTapCount)
                     .tabItem {
                         Image(systemName: "calendar")
                         Text("Calendar")
                     }
-                    .tag(1)
+                    .tag(2)
 
                 SettingsView()
                     .tabItem {
                         Image(systemName: "gearshape.fill")
                         Text("Settings")
                     }
-                    .tag(2)
+                    .tag(3)
             }
-            .tint(.blue)
+            .tint(.green)
 
             // Invisible button overlays on tabs to detect re-tap
             GeometryReader { geometry in
-                let tabWidth = geometry.size.width / 3
+                let tabWidth = geometry.size.width / 4
 
-                // Today tab overlay
-                Color.clear
-                    .frame(width: tabWidth, height: 49)
-                    .contentShape(Rectangle())
-                    .position(x: tabWidth / 2, y: geometry.size.height - 24.5)
-                    .onTapGesture {
-                        if selectedTab == 0 {
-                            homeTodayTapCount += 1
-                        } else {
-                            selectedTab = 0
-                        }
-                    }
-
-                // Calendar tab overlay
+                // Activity tab overlay (was Today, now index 1)
                 Color.clear
                     .frame(width: tabWidth, height: 49)
                     .contentShape(Rectangle())
                     .position(x: tabWidth * 1.5, y: geometry.size.height - 24.5)
                     .onTapGesture {
                         if selectedTab == 1 {
-                            calendarTodayTapCount += 1
+                            homeTodayTapCount += 1
                         } else {
                             selectedTab = 1
+                        }
+                    }
+
+                // Calendar tab overlay (now index 2)
+                Color.clear
+                    .frame(width: tabWidth, height: 49)
+                    .contentShape(Rectangle())
+                    .position(x: tabWidth * 2.5, y: geometry.size.height - 24.5)
+                    .onTapGesture {
+                        if selectedTab == 2 {
+                            calendarTodayTapCount += 1
+                        } else {
+                            selectedTab = 2
                         }
                     }
             }

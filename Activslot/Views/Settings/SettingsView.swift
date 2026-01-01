@@ -320,36 +320,34 @@ struct SettingsView: View {
                     }
                 }
 
-                // Autopilot Mode
+                // Smart Planning
                 Section {
                     NavigationLink {
-                        AutopilotSettingsView()
+                        SmartPlanningSettingsView()
                             .environmentObject(userPreferences)
                             .environmentObject(calendarManager)
                     } label: {
                         HStack {
-                            Image(systemName: "bolt.fill")
-                                .foregroundColor(.yellow)
+                            Image(systemName: "brain.head.profile")
+                                .foregroundColor(.green)
                                 .frame(width: 28)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Autopilot Mode")
+                                Text("Smart Planning")
                                     .foregroundColor(.primary)
-                                Text(userPreferences.autopilotEnabled ? "Active" : "Off")
-                                    .font(.caption)
-                                    .foregroundColor(userPreferences.autopilotEnabled ? .green : .secondary)
-                            }
-                            Spacer()
-                            if userPreferences.autopilotEnabled {
-                                Text(userPreferences.autopilotTrustLevel.displayName)
+                                Text("Goal-based daily plans")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
+                            Spacer()
+                            Text("\(userPreferences.dailyStepGoal.formatted()) steps")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
                     }
                 } header: {
-                    Text("Invisible Fitness")
+                    Text("Intelligent Planning")
                 } footer: {
-                    Text("Let the app schedule your walks automatically. Zero decisions needed.")
+                    Text("The app learns your patterns and creates personalized plans to hit your step goal.")
                 }
 
                 // Your Journey / Identity
