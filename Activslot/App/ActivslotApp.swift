@@ -61,6 +61,9 @@ struct ActivslotApp: App {
             await testManager.generateFullTestScenario()
         case "clear":
             await testManager.clearAllTestData()
+        case "production_tests":
+            // Production tests - run from TestDataManager
+            print("Production tests available in TestDataManager")
         default:
             print("DEBUG: Unknown test scenario: \(scenario)")
         }
