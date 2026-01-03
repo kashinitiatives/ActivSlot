@@ -86,6 +86,12 @@ struct ActivslotApp: App {
                 // Regenerate movement plans with updated calendar data
                 await MovementPlanManager.shared.generatePlans()
 
+                // Morning refresh for smart daily planning (6-10 AM window)
+                let hour = Calendar.current.component(.hour, from: Date())
+                if hour >= 6 && hour < 10 {
+                    await DailyPlanSyncCoordinator.shared.refreshTodayPlan()
+                }
+
                 // Refresh daily notifications and autopilot scheduling
                 await NotificationManager.shared.refreshDailyNotifications()
                 await AutopilotManager.shared.scheduleWalksForTomorrow()
@@ -96,6 +102,16 @@ struct ActivslotApp: App {
             Task {
                 await NotificationManager.shared.refreshDailyNotifications()
                 await AutopilotManager.shared.scheduleWalksForTomorrow()
+
+                // Evening sync for tomorrow's plan (if past sync time)
+                let hour = Calendar.current.component(.hour, from: Date())
+                let prefs = UserPreferences.shared
+                if hour >= prefs.smartPlanSyncTimeHour {
+                    await DailyPlanSyncCoordinator.shared.syncTomorrowPlan()
+                }
+
+                // Cleanup old managed events
+                DailyPlanSyncCoordinator.shared.cleanupOldManagedEvents()
             }
 
         case .inactive:

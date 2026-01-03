@@ -46,6 +46,7 @@
 		CELEB0000001 /* CelebrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELEB0000011 /* CelebrationView.swift */; };
 		BUNDL0000001 /* Bundle+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = BUNDL0000011 /* Bundle+Extensions.swift */; };
 		LEGAL0000001 /* LegalViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = LEGAL0000011 /* LegalViews.swift */; };
+		DPSYN0000001 /* DailyPlanSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DPSYN0000011 /* DailyPlanSyncCoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -90,6 +91,7 @@
 		CELEB0000011 /* CelebrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationView.swift; sourceTree = "<group>"; };
 		BUNDL0000011 /* Bundle+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bundle+Extensions.swift"; sourceTree = "<group>"; };
 		LEGAL0000011 /* LegalViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalViews.swift; sourceTree = "<group>"; };
+		DPSYN0000011 /* DailyPlanSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyPlanSyncCoordinator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -159,6 +161,7 @@
 				72C9429EAAAA0001CAFBCC /* SmartPlannerEngine.swift */,
 				72C942A4BBBB0001CAFBCC /* TestDataManager.swift */,
 				STREAK000011 /* StreakManager.swift */,
+				DPSYN0000011 /* DailyPlanSyncCoordinator.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -364,6 +367,7 @@
 				72C942A1AAAA0003CAFBCC /* SmartPlanningSettingsView.swift in Sources */,
 				72C942A3BBBB0001CAFBCC /* TestDataManager.swift in Sources */,
 				STREAK000001 /* StreakManager.swift in Sources */,
+				DPSYN0000001 /* DailyPlanSyncCoordinator.swift in Sources */,
 				CELEB0000001 /* CelebrationView.swift in Sources */,
 				BUNDL0000001 /* Bundle+Extensions.swift in Sources */,
 				LEGAL0000001 /* LegalViews.swift in Sources */,

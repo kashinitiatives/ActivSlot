@@ -318,6 +318,33 @@ class UserPreferences: ObservableObject {
         set { autopilotTrustLevelRaw = newValue.rawValue }
     }
 
+    // MARK: - Smart Daily Planning (Auto-Sync)
+    @AppStorage("smartPlanAutoSyncEnabled") var smartPlanAutoSyncEnabled: Bool = false
+    @AppStorage("smartPlanCalendarID") var smartPlanCalendarID: String = ""
+    @AppStorage("smartPlanSyncTimeHour") var smartPlanSyncTimeHour: Int = 20  // 8 PM default
+    @AppStorage("smartPlanSyncTimeMinute") var smartPlanSyncTimeMinute: Int = 0
+    @AppStorage("smartPlanMorningRefreshEnabled") var smartPlanMorningRefreshEnabled: Bool = true
+    @AppStorage("smartPlanLastSyncDate") var smartPlanLastSyncDate: String = ""
+    @AppStorage("smartPlanManagedEventIDs") private var smartPlanManagedEventIDsData: Data = Data()
+
+    var smartPlanSyncTime: TimeOfDay {
+        get { TimeOfDay(hour: smartPlanSyncTimeHour, minute: smartPlanSyncTimeMinute) }
+        set {
+            smartPlanSyncTimeHour = newValue.hour
+            smartPlanSyncTimeMinute = newValue.minute
+        }
+    }
+
+    /// Track managed event IDs for update/delete lifecycle (date string -> [eventIDs])
+    var smartPlanManagedEventIDs: [String: [String]] {
+        get {
+            (try? JSONDecoder().decode([String: [String]].self, from: smartPlanManagedEventIDsData)) ?? [:]
+        }
+        set {
+            smartPlanManagedEventIDsData = (try? JSONEncoder().encode(newValue)) ?? Data()
+        }
+    }
+
     // MARK: - Personal Why (Motivation)
     @AppStorage("personalWhyRaw") var personalWhyRaw: String = ""
     @AppStorage("personalWhyCustom") var personalWhyCustom: String = ""

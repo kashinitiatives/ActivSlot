@@ -486,6 +486,9 @@ class CalendarManager: ObservableObject {
 
             _ = try await (todayTask, tomorrowTask)
 
+            // Notify DailyPlanSyncCoordinator of calendar changes for potential plan regeneration
+            await DailyPlanSyncCoordinator.shared.handleCalendarChange()
+
             #if DEBUG
             print("Calendar events refreshed successfully")
             #endif

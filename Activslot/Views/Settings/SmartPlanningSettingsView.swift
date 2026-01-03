@@ -124,6 +124,102 @@ struct SmartPlanningSettingsView: View {
                 Text("Calendar")
             }
 
+            // Automatic Daily Planning Section
+            Section {
+                Toggle(isOn: $userPreferences.smartPlanAutoSyncEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Automatic Daily Planning")
+                        Text("Generate and sync walk plans daily")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                if userPreferences.smartPlanAutoSyncEnabled {
+                    // Calendar permission warning
+                    if !calendarManager.isAuthorized {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text("Calendar permission required")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
+                    }
+
+                    // Calendar Picker
+                    Picker("Sync to Calendar", selection: $userPreferences.smartPlanCalendarID) {
+                        Text("Select Calendar").tag("")
+                        ForEach(calendarManager.ownedCalendars) { calendar in
+                            HStack {
+                                Circle()
+                                    .fill(calendar.color)
+                                    .frame(width: 10, height: 10)
+                                Text(calendar.title)
+                            }
+                            .tag(calendar.id)
+                        }
+                    }
+
+                    // Evening sync time
+                    DatePicker(
+                        "Evening Plan Time",
+                        selection: Binding(
+                            get: { userPreferences.smartPlanSyncTime.date },
+                            set: { userPreferences.smartPlanSyncTime = TimeOfDay.from(date: $0) }
+                        ),
+                        displayedComponents: .hourAndMinute
+                    )
+
+                    // Morning refresh toggle
+                    Toggle(isOn: $userPreferences.smartPlanMorningRefreshEnabled) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Morning Refresh")
+                            Text("Update plan when calendar changes")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    // Manual sync button
+                    Button {
+                        Task {
+                            await DailyPlanSyncCoordinator.shared.syncPlan(for: Date())
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text("Sync Now")
+                        }
+                    }
+
+                    // Last sync info
+                    if !userPreferences.smartPlanLastSyncDate.isEmpty {
+                        HStack {
+                            Text("Last synced")
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text(userPreferences.smartPlanLastSyncDate)
+                                .foregroundColor(.secondary)
+                        }
+                        .font(.caption)
+                    }
+                }
+            } header: {
+                Text("Automatic Daily Planning")
+            } footer: {
+                if userPreferences.smartPlanAutoSyncEnabled {
+                    if userPreferences.smartPlanCalendarID.isEmpty {
+                        Text("Select a calendar to sync your walk plans")
+                            .foregroundColor(.orange)
+                    } else {
+                        Text("Plans are generated each evening for tomorrow and refreshed in the morning based on your calendar changes.")
+                    }
+                } else {
+                    Text("Enable to have walk plans automatically created and synced to your calendar each day based on your patterns and preferences.")
+                }
+            }
+
             // Learning Insights
             Section {
                 if let patterns = planner.userPatterns {
