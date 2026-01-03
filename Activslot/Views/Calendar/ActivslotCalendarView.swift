@@ -14,7 +14,18 @@ struct ActivslotCalendarView: View {
     @State private var showAddActivity = false
     @State private var selectedActivity: PlannedActivity?
     @State private var showActivityDetail = false
-    @State private var externalEvents: [CalendarEvent] = []
+    @State private var externalEventsForOtherDates: [CalendarEvent] = []
+
+    // Use CalendarManager's published events for today/tomorrow, fallback to fetched for other dates
+    private var externalEvents: [CalendarEvent] {
+        if Calendar.current.isDateInToday(selectedDate) {
+            return calendarManager.todayEvents
+        } else if Calendar.current.isDateInTomorrow(selectedDate) {
+            return calendarManager.tomorrowEvents
+        } else {
+            return externalEventsForOtherDates
+        }
+    }
     @State private var showSyncSheet = false
     @State private var isSyncing = false
     @State private var syncSuccess = false
@@ -74,7 +85,8 @@ struct ActivslotCalendarView: View {
                     },
                     onActivityDurationChanged: { activity, newDuration in
                         updateActivityDuration(activity, to: newDuration)
-                    }
+                    },
+                    scrollToCurrentTimeTrigger: resetToTodayTrigger
                 )
             }
             .navigationTitle("Calendar")
@@ -208,7 +220,9 @@ struct ActivslotCalendarView: View {
                 syncSuccess = false
             }
         } catch {
+            #if DEBUG
             print("Sync failed: \(error)")
+            #endif
         }
     }
 
@@ -247,10 +261,33 @@ struct ActivslotCalendarView: View {
     }
 
     private func loadExternalEvents() async {
-        if let events = try? await calendarManager.fetchEvents(for: selectedDate) {
-            await MainActor.run {
-                externalEvents = events
+        #if DEBUG
+        print("DEBUG Calendar: Loading external events for \(selectedDate)")
+        print("DEBUG Calendar: Calendar authorized: \(calendarManager.isAuthorized)")
+        print("DEBUG Calendar: Is today: \(Calendar.current.isDateInToday(selectedDate))")
+        print("DEBUG Calendar: Is tomorrow: \(Calendar.current.isDateInTomorrow(selectedDate))")
+        #endif
+
+        // For today/tomorrow, the computed property uses CalendarManager's published events
+        // Only fetch for other dates
+        if !Calendar.current.isDateInToday(selectedDate) && !Calendar.current.isDateInTomorrow(selectedDate) {
+            do {
+                let events = try await calendarManager.fetchEvents(for: selectedDate)
+                #if DEBUG
+                print("DEBUG Calendar: Fetched \(events.count) events for other date")
+                #endif
+                await MainActor.run {
+                    externalEventsForOtherDates = events
+                }
+            } catch {
+                #if DEBUG
+                print("DEBUG Calendar: Error fetching events: \(error)")
+                #endif
             }
+        } else {
+            #if DEBUG
+            print("DEBUG Calendar: Using CalendarManager's published events (today: \(calendarManager.todayEvents.count), tomorrow: \(calendarManager.tomorrowEvents.count))")
+            #endif
         }
     }
 
@@ -307,6 +344,7 @@ struct DayCalendarView: View {
     let onAddTap: (Date) -> Void
     var onActivityTimeChanged: ((PlannedActivity, Date) -> Void)? = nil
     var onActivityDurationChanged: ((PlannedActivity, Int) -> Void)? = nil
+    var scrollToCurrentTimeTrigger: Int = 0
 
     private let hourHeight: CGFloat = 60
     private let hours = Array(0..<24)
@@ -331,11 +369,11 @@ struct DayCalendarView: View {
 
     // Separate all-day events from timed events
     private var allDayEvents: [CalendarEvent] {
-        filteredExternalEvents.filter { $0.duration >= 1440 } // 24 hours or more
+        filteredExternalEvents.filter { $0.isAllDay }
     }
 
     private var timedEvents: [CalendarEvent] {
-        filteredExternalEvents.filter { $0.duration < 1440 }
+        filteredExternalEvents.filter { !$0.isAllDay }
     }
 
     // Calculate horizontal positions for overlapping events
@@ -455,13 +493,35 @@ struct DayCalendarView: View {
                         }
                     }
                     .onAppear {
-                        // Scroll to current hour or 8 AM
-                        let targetHour = Calendar.current.isDateInToday(selectedDate)
-                            ? max(0, Calendar.current.component(.hour, from: Date()) - 1)
-                            : 8
-                        proxy.scrollTo(targetHour, anchor: .top)
+                        scrollToAppropriateTime(proxy: proxy)
+                    }
+                    .onChange(of: selectedDate) { _, _ in
+                        scrollToAppropriateTime(proxy: proxy)
+                    }
+                    .onChange(of: scrollToCurrentTimeTrigger) { _, _ in
+                        // When tab is re-tapped, scroll to current time if today
+                        if Calendar.current.isDateInToday(selectedDate) {
+                            let currentHour = max(0, Calendar.current.component(.hour, from: Date()) - 1)
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                proxy.scrollTo(currentHour, anchor: .top)
+                            }
+                        }
                     }
                 }
+            }
+        }
+    }
+
+    private func scrollToAppropriateTime(proxy: ScrollViewProxy) {
+        // Scroll to current hour if today, otherwise scroll to 8 AM
+        let targetHour = Calendar.current.isDateInToday(selectedDate)
+            ? max(0, Calendar.current.component(.hour, from: Date()) - 1)
+            : 8
+
+        // Add slight delay to ensure ScrollView content is rendered
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                proxy.scrollTo(targetHour, anchor: .top)
             }
         }
     }
@@ -862,6 +922,11 @@ struct ExternalEventBlock: View {
     var totalColumns: Int = 1
     var timeColumnWidth: CGFloat = 50
 
+    // Use green accent for walkable meetings, blue for regular
+    private var accentColor: Color {
+        event.isWalkable ? .green : .blue
+    }
+
     var body: some View {
         let yOffset = calculateYOffset()
         let height = calculateHeight()
@@ -874,24 +939,30 @@ struct ExternalEventBlock: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.blue)
+                        .fill(accentColor)
                         .frame(width: 3)
 
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(event.title)
-                            .font(.caption2)
-                            .fontWeight(.medium)
-                            .lineLimit(height > 40 ? 2 : 1)
-                            .foregroundColor(.primary)
+                        HStack(spacing: 4) {
+                            Text(event.title)
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .lineLimit(height > 40 ? 2 : 1)
+                                .foregroundColor(.primary)
 
-                        if height > 35 && event.isWalkable {
-                            HStack(spacing: 2) {
+                            // Show walking icon for walkable meetings
+                            if event.isWalkable {
                                 Image(systemName: "figure.walk")
-                                    .font(.system(size: 8))
-                                Text("Walkable")
                                     .font(.system(size: 9))
+                                    .foregroundColor(.green)
                             }
-                            .foregroundColor(.green)
+                        }
+
+                        // Show "Walkable" label if there's enough space
+                        if height > 35 && event.isWalkable {
+                            Text("Great for walking!")
+                                .font(.system(size: 8))
+                                .foregroundColor(.green)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -900,11 +971,11 @@ struct ExternalEventBlock: View {
             }
             .frame(width: columnWidth - 4, alignment: .leading)
             .frame(height: max(height - 2, 24))
-            .background(Color.blue.opacity(0.15))
+            .background(accentColor.opacity(0.12))
             .cornerRadius(4)
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
-                    .stroke(Color.blue.opacity(0.4), lineWidth: 0.5)
+                    .stroke(accentColor.opacity(0.4), lineWidth: event.isWalkable ? 1 : 0.5)
             )
             .position(x: xOffset + (columnWidth - 4) / 2, y: yOffset + height / 2)
         }
@@ -928,27 +999,27 @@ struct ExternalEventBlock: View {
 struct CurrentTimeIndicator: View {
     let hourHeight: CGFloat
 
+    // Use TimelineView for automatic updates every 30 seconds
     var body: some View {
-        let yOffset = calculateYOffset()
+        TimelineView(.periodic(from: .now, by: 30)) { timeline in
+            let now = timeline.date
+            let calendar = Calendar.current
+            let hour = calendar.component(.hour, from: now)
+            let minute = calendar.component(.minute, from: now)
+            let yOffset = CGFloat(hour) * hourHeight + CGFloat(minute) / 60.0 * hourHeight
 
-        HStack(spacing: 0) {
-            Circle()
-                .fill(Color.red)
-                .frame(width: 10, height: 10)
-                .offset(x: 56)
+            HStack(spacing: 0) {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 10, height: 10)
+                    .offset(x: 56)
 
-            Rectangle()
-                .fill(Color.red)
-                .frame(height: 2)
+                Rectangle()
+                    .fill(Color.red)
+                    .frame(height: 2)
+            }
+            .offset(y: yOffset)
         }
-        .offset(y: yOffset)
-    }
-
-    private func calculateYOffset() -> CGFloat {
-        let calendar = Calendar.current
-        let hour = calendar.component(.hour, from: Date())
-        let minute = calendar.component(.minute, from: Date())
-        return CGFloat(hour) * hourHeight + CGFloat(minute) / 60 * hourHeight
     }
 }
 

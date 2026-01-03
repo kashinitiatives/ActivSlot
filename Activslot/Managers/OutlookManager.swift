@@ -111,7 +111,9 @@ class OutlookManager: ObservableObject {
 
     private func setupMSAL() {
         guard !clientId.isEmpty else {
+            #if DEBUG
             print("OutlookManager: Client ID not configured")
+            #endif
             return
         }
 
@@ -122,13 +124,21 @@ class OutlookManager: ObservableObject {
             config.redirectUri = redirectUri
 
             // Allow any organizational directory (multi-tenant)
-            config.authority = try MSALAADAuthority(url: URL(string: "https://login.microsoftonline.com/common")!)
+            guard let authorityURL = URL(string: "https://login.microsoftonline.com/common") else {
+                errorMessage = "Failed to initialize Microsoft authentication"
+                return
+            }
+            config.authority = try MSALAADAuthority(url: authorityURL)
 
             applicationContext = try MSALPublicClientApplication(configuration: config)
 
+            #if DEBUG
             print("OutlookManager: MSAL initialized with redirect URI: \(redirectUri)")
+            #endif
         } catch {
+            #if DEBUG
             print("Failed to create MSAL application: \(error)")
+            #endif
             errorMessage = "Failed to initialize Microsoft authentication"
         }
     }
@@ -144,7 +154,9 @@ class OutlookManager: ObservableObject {
                 userName = account.username?.components(separatedBy: "@").first
             }
         } catch {
+            #if DEBUG
             print("Error checking existing accounts: \(error)")
+            #endif
         }
     }
 
@@ -209,7 +221,9 @@ class OutlookManager: ObservableObject {
             outlookEvents = []
 
         } catch {
+            #if DEBUG
             print("Error signing out: \(error)")
+            #endif
         }
     }
 

@@ -41,6 +41,11 @@
 		72C9429DAAAA0001CAFBCC /* SmartPlannerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C9429EAAAA0001CAFBCC /* SmartPlannerEngine.swift */; };
 		72C9429FAAAA0002CAFBCC /* SmartPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C942A0AAAA0002CAFBCC /* SmartPlanView.swift */; };
 		72C942A1AAAA0003CAFBCC /* SmartPlanningSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C942A2AAAA0003CAFBCC /* SmartPlanningSettingsView.swift */; };
+		72C942A3BBBB0001CAFBCC /* TestDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C942A4BBBB0001CAFBCC /* TestDataManager.swift */; };
+		STREAK000001 /* StreakManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = STREAK000011 /* StreakManager.swift */; };
+		CELEB0000001 /* CelebrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELEB0000011 /* CelebrationView.swift */; };
+		BUNDL0000001 /* Bundle+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = BUNDL0000011 /* Bundle+Extensions.swift */; };
+		LEGAL0000001 /* LegalViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = LEGAL0000011 /* LegalViews.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -80,6 +85,11 @@
 		72C9429EAAAA0001CAFBCC /* SmartPlannerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartPlannerEngine.swift; sourceTree = "<group>"; };
 		72C942A0AAAA0002CAFBCC /* SmartPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartPlanView.swift; sourceTree = "<group>"; };
 		72C942A2AAAA0003CAFBCC /* SmartPlanningSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartPlanningSettingsView.swift; sourceTree = "<group>"; };
+		72C942A4BBBB0001CAFBCC /* TestDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestDataManager.swift; sourceTree = "<group>"; };
+		STREAK000011 /* StreakManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreakManager.swift; sourceTree = "<group>"; };
+		CELEB0000011 /* CelebrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationView.swift; sourceTree = "<group>"; };
+		BUNDL0000011 /* Bundle+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bundle+Extensions.swift"; sourceTree = "<group>"; };
+		LEGAL0000011 /* LegalViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalViews.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,11 +119,20 @@
 				001A00072 /* Managers */,
 				001A00073 /* Models */,
 				001A00074 /* Views */,
+				EXTNS00001 /* Extensions */,
 				001A00031 /* Assets.xcassets */,
 				001A00032 /* Info.plist */,
 				001A00033 /* Activslot.entitlements */,
 			);
 			path = Activslot;
+			sourceTree = "<group>";
+		};
+		EXTNS00001 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				BUNDL0000011 /* Bundle+Extensions.swift */,
+			);
+			path = Extensions;
 			sourceTree = "<group>";
 		};
 		001A00071 /* App */ = {
@@ -138,6 +157,8 @@
 				72C94290DDDD0001CAFBCC /* ScheduledActivityManager.swift */,
 				72C94296FFFF0001CAFBCC /* AutopilotManager.swift */,
 				72C9429EAAAA0001CAFBCC /* SmartPlannerEngine.swift */,
+				72C942A4BBBB0001CAFBCC /* TestDataManager.swift */,
+				STREAK000011 /* StreakManager.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -157,6 +178,7 @@
 			isa = PBXGroup;
 			children = (
 				001A00013 /* MainTabView.swift */,
+				CELEB0000011 /* CelebrationView.swift */,
 				001A00075 /* Home */,
 				001A00078 /* Calendar */,
 				001A00076 /* Onboarding */,
@@ -220,6 +242,7 @@
 				72C9427E2EF86B0100CAFBCC /* CalendarSelectionView 2.swift */,
 				72C9429CFFFF0004CAFBCC /* AutopilotSettingsView.swift */,
 				72C942A2AAAA0003CAFBCC /* SmartPlanningSettingsView.swift */,
+				LEGAL0000011 /* LegalViews.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -339,6 +362,11 @@
 				72C9429DAAAA0001CAFBCC /* SmartPlannerEngine.swift in Sources */,
 				72C9429FAAAA0002CAFBCC /* SmartPlanView.swift in Sources */,
 				72C942A1AAAA0003CAFBCC /* SmartPlanningSettingsView.swift in Sources */,
+				72C942A3BBBB0001CAFBCC /* TestDataManager.swift in Sources */,
+				STREAK000001 /* StreakManager.swift in Sources */,
+				CELEB0000001 /* CelebrationView.swift in Sources */,
+				BUNDL0000001 /* Bundle+Extensions.swift in Sources */,
+				LEGAL0000001 /* LegalViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

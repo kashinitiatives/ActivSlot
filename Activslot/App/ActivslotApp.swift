@@ -24,8 +24,50 @@ struct ActivslotApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     handleScenePhaseChange(newPhase)
                 }
+                #if DEBUG
+                .task {
+                    await runDebugTestScenarioIfRequested()
+                }
+                #endif
         }
     }
+
+    #if DEBUG
+    /// Runs a test scenario based on launch argument or environment variable
+    /// Usage: Set TEST_SCENARIO environment variable to one of:
+    /// - "busy_executive", "light_day", "almost_goal", "goal_reached", "walkable_meetings", "full_test"
+    private func runDebugTestScenarioIfRequested() async {
+        // Check for test scenario from environment variable
+        guard let scenario = ProcessInfo.processInfo.environment["TEST_SCENARIO"] else {
+            return
+        }
+
+        print("DEBUG: Running test scenario: \(scenario)")
+
+        let testManager = TestDataManager.shared
+
+        switch scenario.lowercased() {
+        case "busy_executive":
+            await testManager.setupBusyExecutiveScenario()
+        case "light_day":
+            await testManager.setupLightDayScenario()
+        case "almost_goal":
+            await testManager.setupAlmostThereScenario()
+        case "goal_reached":
+            await testManager.setupGoalReachedScenario()
+        case "walkable_meetings":
+            await testManager.setupWalkableMeetingsScenario()
+        case "full_test":
+            await testManager.generateFullTestScenario()
+        case "clear":
+            await testManager.clearAllTestData()
+        default:
+            print("DEBUG: Unknown test scenario: \(scenario)")
+        }
+
+        print("DEBUG: Test scenario '\(scenario)' completed")
+    }
+    #endif
 
     private func handleScenePhaseChange(_ phase: ScenePhase) {
         switch phase {

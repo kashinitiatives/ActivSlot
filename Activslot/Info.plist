@@ -4,6 +4,12 @@
 <dict>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Activslot needs access to your calendar to find walkable meetings and suggest the best times for your gym sessions.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Activslot uses your step count and workout data to track your progress and suggest the best times for walks.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Activslot can save step data for testing purposes in debug builds.</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>Activslot sends notifications to remind you about walking meetings, evening briefings, and when your streak is at risk.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

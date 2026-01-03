@@ -102,7 +102,9 @@ class AutopilotManager: ObservableObject {
             )
 
             guard !walkSlots.isEmpty else {
+                #if DEBUG
                 print("Autopilot: No suitable walk slots found for tomorrow")
+                #endif
                 return
             }
 
@@ -159,7 +161,9 @@ class AutopilotManager: ObservableObject {
             }
 
         } catch {
+            #if DEBUG
             print("Autopilot: Error scheduling walks - \(error)")
+            #endif
         }
     }
 

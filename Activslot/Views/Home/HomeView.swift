@@ -8,6 +8,7 @@ struct HomeView: View {
     @StateObject private var insightsManager = PersonalInsightsManager.shared
     @StateObject private var scheduledActivityManager = ScheduledActivityManager.shared
     @StateObject private var activityStore = ActivityStore.shared
+    @StateObject private var streakManager = StreakManager.shared
 
     // Trigger to reset to Today tab when bottom tab is tapped
     var resetToTodayTrigger: Int = 0
@@ -47,6 +48,15 @@ struct HomeView: View {
                         goalSteps: userPreferences.dailyStepGoal,
                         isToday: selectedDay == .today
                     )
+
+                    // Streak Card (only for Today)
+                    if selectedDay == .today {
+                        StreakCard(
+                            streakManager: streakManager,
+                            currentSteps: healthKitManager.todaySteps,
+                            goalSteps: userPreferences.dailyStepGoal
+                        )
+                    }
 
                     // Conflicts Alert (if any)
                     if selectedDay == .today && !planManager.todayConflicts.isEmpty {
@@ -134,6 +144,8 @@ struct HomeView: View {
                         return slot
                     }
 
+                    // All walk slots are shown here with selection and scheduling capability
+                    // This replaces the old MovementPlanSection which showed non-selectable slots
                     SuggestedSlotsSection(
                         suggestedWalk: primaryWalkSlot,
                         suggestedWorkout: futureWorkoutSlot,
@@ -172,34 +184,22 @@ struct HomeView: View {
                         }
                     )
 
-                    // Movement Plan Section (walkable meetings and free time slots)
+                    // Show loading or empty state if no plan available
                     if selectedDay == .today {
-                        if let todayPlan = planManager.todayPlan {
-                            MovementPlanSection(
-                                plan: todayPlan,
-                                showCalendar: $showCalendarView,
-                                hasWorkoutGoal: userPreferences.hasWorkoutGoal,
-                                showScheduleWalk: $showScheduleWalk,
-                                showScheduleWorkout: $showScheduleWorkout
-                            )
-                        } else if planManager.isLoading {
-                            LoadingCard()
-                        } else {
-                            EmptyPlanCard(message: "Pull down to refresh your plan")
+                        if planManager.todayPlan == nil {
+                            if planManager.isLoading {
+                                LoadingCard()
+                            } else if consolidatedWalkSlots.isEmpty && consolidatedMeetingSlots.isEmpty {
+                                EmptyPlanCard(message: "Pull down to refresh your plan")
+                            }
                         }
                     } else {
-                        if let tomorrowPlan = planManager.tomorrowPlan {
-                            MovementPlanSection(
-                                plan: tomorrowPlan,
-                                showCalendar: $showCalendarView,
-                                hasWorkoutGoal: userPreferences.hasWorkoutGoal,
-                                showScheduleWalk: $showScheduleWalk,
-                                showScheduleWorkout: $showScheduleWorkout
-                            )
-                        } else if planManager.isLoading {
-                            LoadingCard()
-                        } else {
-                            EmptyPlanCard(message: "Tomorrow's plan is not ready yet")
+                        if planManager.tomorrowPlan == nil {
+                            if planManager.isLoading {
+                                LoadingCard()
+                            } else if consolidatedWalkSlots.isEmpty && consolidatedMeetingSlots.isEmpty {
+                                EmptyPlanCard(message: "Tomorrow's plan is not ready yet")
+                            }
                         }
                     }
                 }
@@ -736,6 +736,10 @@ struct StepProgressCard: View {
     let goalSteps: Int
     let isToday: Bool
 
+    @State private var showCelebration = false
+    @State private var previousSteps: Int = 0
+    @AppStorage("lastCelebrationDate") private var lastCelebrationDateString: String = ""
+
     private var progress: Double {
         guard goalSteps > 0 else { return 0 }
         return min(1.0, Double(currentSteps) / Double(goalSteps))
@@ -743,6 +747,10 @@ struct StepProgressCard: View {
 
     private var stepsRemaining: Int {
         max(0, goalSteps - currentSteps)
+    }
+
+    private var goalReached: Bool {
+        currentSteps >= goalSteps
     }
 
     var body: some View {
@@ -753,7 +761,7 @@ struct StepProgressCard: View {
                     .foregroundColor(.secondary)
                 Spacer()
 
-                if currentSteps >= goalSteps {
+                if goalReached {
                     Label("Goal reached!", systemImage: "checkmark.circle.fill")
                         .font(.caption)
                         .foregroundColor(.green)
@@ -768,7 +776,7 @@ struct StepProgressCard: View {
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(
-                        currentSteps >= goalSteps ? Color.green : Color.blue,
+                        goalReached ? Color.green : Color.blue,
                         style: StrokeStyle(lineWidth: 12, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
@@ -777,6 +785,7 @@ struct StepProgressCard: View {
                 VStack(spacing: 4) {
                     Text("\(currentSteps.formatted())")
                         .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundColor(goalReached ? .green : .primary)
 
                     Text("/ \(goalSteps.formatted())")
                         .font(.subheadline)
@@ -789,11 +798,48 @@ struct StepProgressCard: View {
                 Text("\(stepsRemaining.formatted()) steps to go")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+            } else if goalReached && isToday {
+                HStack {
+                    Image(systemName: "star.fill")
+                        .foregroundColor(.yellow)
+                    Text("Exceeded by \((currentSteps - goalSteps).formatted()) steps!")
+                        .font(.subheadline)
+                        .foregroundColor(.green)
+                }
             }
         }
         .padding(24)
         .background(Color(.secondarySystemBackground))
         .cornerRadius(20)
+        .onAppear {
+            previousSteps = currentSteps
+        }
+        .onChange(of: currentSteps) { oldValue, newValue in
+            checkForCelebration(oldSteps: oldValue, newSteps: newValue)
+        }
+        .overlay {
+            GoalCelebrationOverlay(
+                isShowing: $showCelebration,
+                stepCount: currentSteps,
+                goalSteps: goalSteps
+            )
+        }
+    }
+
+    private func checkForCelebration(oldSteps: Int, newSteps: Int) {
+        // Only celebrate if:
+        // 1. It's today
+        // 2. Steps just crossed the goal threshold
+        // 3. We haven't celebrated today yet
+        guard isToday else { return }
+        guard oldSteps < goalSteps && newSteps >= goalSteps else { return }
+
+        let todayString = ISO8601DateFormatter().string(from: Calendar.current.startOfDay(for: Date()))
+        guard lastCelebrationDateString != todayString else { return }
+
+        // Show celebration
+        lastCelebrationDateString = todayString
+        showCelebration = true
     }
 }
 
@@ -2705,7 +2751,9 @@ struct CombinedCalendarView: View {
                 syncSuccess = false
             }
         } catch {
+            #if DEBUG
             print("Sync failed: \(error)")
+            #endif
             // Reset state on error
             await MainActor.run {
                 syncSuccess = false

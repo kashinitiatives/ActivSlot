@@ -1,9 +1,23 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @State private var selectedTab = 0
+    @State private var selectedTab: Int
     @State private var homeTodayTapCount = 0
     @State private var calendarTodayTapCount = 0
+
+    init() {
+        #if DEBUG
+        // Allow starting on specific tab via environment variable (0=MyPlan, 1=Activity, 2=Calendar, 3=Settings)
+        if let tabStr = ProcessInfo.processInfo.environment["START_TAB"],
+           let tab = Int(tabStr) {
+            _selectedTab = State(initialValue: tab)
+        } else {
+            _selectedTab = State(initialValue: 0)
+        }
+        #else
+        _selectedTab = State(initialValue: 0)
+        #endif
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -11,29 +25,25 @@ struct MainTabView: View {
                 // Smart Plan - The main view for intelligent daily planning
                 SmartPlanView()
                     .tabItem {
-                        Image(systemName: "brain.head.profile")
-                        Text("My Plan")
+                        Label("My Plan", systemImage: "list.bullet.clipboard")
                     }
                     .tag(0)
 
                 HomeView(resetToTodayTrigger: homeTodayTapCount)
                     .tabItem {
-                        Image(systemName: "figure.walk")
-                        Text("Activity")
+                        Label("Activity", systemImage: "figure.walk")
                     }
                     .tag(1)
 
                 ActivslotCalendarView(resetToTodayTrigger: calendarTodayTapCount)
                     .tabItem {
-                        Image(systemName: "calendar")
-                        Text("Calendar")
+                        Label("Calendar", systemImage: "calendar")
                     }
                     .tag(2)
 
                 SettingsView()
                     .tabItem {
-                        Image(systemName: "gearshape.fill")
-                        Text("Settings")
+                        Label("Settings", systemImage: "gearshape.fill")
                     }
                     .tag(3)
             }

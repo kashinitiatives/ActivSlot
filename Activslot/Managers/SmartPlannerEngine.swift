@@ -335,9 +335,9 @@ class SmartPlannerEngine: ObservableObject {
         let prefs = UserPreferences.shared
         let calendar = Calendar.current
 
-        // Build busy intervals
+        // Build busy intervals - only include real meetings (excludes all-day, OOO, and long meetings)
         var busyIntervals: [(start: Date, end: Date)] = []
-        for event in events {
+        for event in events where event.isRealMeeting {
             busyIntervals.append((start: event.startDate, end: event.endDate))
         }
         busyIntervals.sort { $0.start < $1.start }

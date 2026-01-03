@@ -9,6 +9,7 @@ enum NotificationIdentifier {
     static let workoutReminder = "workout-reminder"
     static let afternoonCheckIn = "afternoon-checkin"
     static let daySummary = "day-summary"
+    static let streakAtRisk = "streak-at-risk"
 }
 
 // MARK: - Tomorrow Briefing Data
@@ -197,9 +198,11 @@ class NotificationManager: ObservableObject {
         )
 
         UNUserNotificationCenter.current().add(request) { error in
+            #if DEBUG
             if let error = error {
                 print("Error scheduling evening briefing: \(error)")
             }
+            #endif
         }
     }
 
@@ -277,9 +280,11 @@ class NotificationManager: ObservableObject {
         )
 
         UNUserNotificationCenter.current().add(request) { error in
+            #if DEBUG
             if let error = error {
                 print("Error scheduling walkable meeting reminder: \(error)")
             }
+            #endif
         }
     }
 
@@ -329,6 +334,63 @@ class NotificationManager: ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 
+    // MARK: - Streak At Risk Notification
+
+    func scheduleStreakAtRiskNotification(currentSteps: Int, goalSteps: Int, currentStreak: Int) {
+        guard isAuthorized else { return }
+        guard currentStreak > 0 else { return } // Only if they have a streak to protect
+        guard currentSteps < goalSteps else { return } // Only if goal not yet met
+
+        // Cancel any existing streak notification
+        cancelNotification(identifier: NotificationIdentifier.streakAtRisk)
+
+        let stepsNeeded = goalSteps - currentSteps
+        let content = UNMutableNotificationContent()
+
+        if currentStreak >= 7 {
+            content.title = "🔥 Don't lose your \(currentStreak)-day streak!"
+        } else {
+            content.title = "Keep your streak alive!"
+        }
+        content.body = "You need \(stepsNeeded.formatted()) more steps today. A 15-min walk can do it!"
+        content.sound = .default
+        content.categoryIdentifier = "STREAK_AT_RISK"
+
+        content.userInfo = [
+            "type": "streakAtRisk",
+            "stepsNeeded": stepsNeeded,
+            "currentStreak": currentStreak
+        ]
+
+        // Schedule for 7 PM today if not already past
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day], from: Date())
+        components.hour = 19
+        components.minute = 0
+
+        guard let scheduledDate = calendar.date(from: components),
+              scheduledDate > Date() else { return }
+
+        let trigger = UNCalendarNotificationTrigger(
+            dateMatching: calendar.dateComponents([.hour, .minute], from: scheduledDate),
+            repeats: false
+        )
+
+        let request = UNNotificationRequest(
+            identifier: NotificationIdentifier.streakAtRisk,
+            content: content,
+            trigger: trigger
+        )
+
+        UNUserNotificationCenter.current().add(request) { error in
+            #if DEBUG
+            if let error = error {
+                print("Error scheduling streak at risk notification: \(error)")
+            }
+            #endif
+        }
+    }
+
     // MARK: - Daily Refresh
 
     /// Call this method to refresh all notifications for today/tomorrow
@@ -337,6 +399,8 @@ class NotificationManager: ObservableObject {
 
         let calendarManager = CalendarManager.shared
         let userPrefs = UserPreferences.shared
+        let healthKitManager = HealthKitManager.shared
+        let streakManager = StreakManager.shared
 
         // Get tomorrow's date
         let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
@@ -358,6 +422,16 @@ class NotificationManager: ObservableObject {
         if let todayEvents = try? await calendarManager.fetchEvents(for: Date()) {
             scheduleAllWalkableMeetingReminders(for: todayEvents)
         }
+
+        // Schedule streak-at-risk notification if user has a streak to protect
+        let currentSteps = healthKitManager.todaySteps
+        let goalSteps = userPrefs.dailyStepGoal
+        let currentStreak = streakManager.currentStreak
+        scheduleStreakAtRiskNotification(
+            currentSteps: currentSteps,
+            goalSteps: goalSteps,
+            currentStreak: currentStreak
+        )
     }
 
     // MARK: - Cancel Helpers

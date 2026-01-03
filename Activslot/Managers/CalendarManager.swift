@@ -414,17 +414,41 @@ class CalendarManager: ObservableObject {
 
     func fetchEvents(for date: Date) async throws -> [CalendarEvent] {
         guard isAuthorized else {
+            #if DEBUG
+            print("DEBUG CalendarManager: Not authorized to access calendar")
+            #endif
             throw CalendarError.accessDenied
         }
 
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
+            throw CalendarError.fetchFailed
+        }
 
         // Only fetch from selected calendars
         let calendarsToUse = getSelectedEKCalendars()
+
+        #if DEBUG
+        print("DEBUG CalendarManager: Fetching events for \(date)")
+        print("DEBUG CalendarManager: Selected calendar IDs: \(selectedCalendarIDs)")
+        print("DEBUG CalendarManager: Calendars to use: \(calendarsToUse?.count ?? 0) calendars")
+        if let cals = calendarsToUse {
+            for cal in cals {
+                print("DEBUG CalendarManager: - Calendar: \(cal.title) (\(cal.calendarIdentifier))")
+            }
+        }
+        #endif
+
         let predicate = eventStore.predicateForEvents(withStart: startOfDay, end: endOfDay, calendars: calendarsToUse)
         let ekEvents = eventStore.events(matching: predicate)
+
+        #if DEBUG
+        print("DEBUG CalendarManager: Found \(ekEvents.count) raw EKEvents")
+        for event in ekEvents {
+            print("DEBUG CalendarManager: - EKEvent: \(event.title ?? "No title") at \(event.startDate ?? Date())")
+        }
+        #endif
 
         return ekEvents.map { CalendarEvent(from: $0) }
     }
@@ -437,7 +461,9 @@ class CalendarManager: ObservableObject {
     }
 
     func fetchTomorrowEvents() async throws {
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        guard let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) else {
+            throw CalendarError.fetchFailed
+        }
         let events = try await fetchEvents(for: tomorrow)
         await MainActor.run {
             self.tomorrowEvents = events
@@ -460,9 +486,13 @@ class CalendarManager: ObservableObject {
 
             _ = try await (todayTask, tomorrowTask)
 
+            #if DEBUG
             print("Calendar events refreshed successfully")
+            #endif
         } catch {
+            #if DEBUG
             print("Error refreshing calendar events: \(error)")
+            #endif
         }
     }
 
@@ -478,7 +508,9 @@ class CalendarManager: ObservableObject {
     }
 
     func getTomorrowWalkableMeetings() async throws -> [CalendarEvent] {
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        guard let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) else {
+            throw CalendarError.fetchFailed
+        }
         return try await getWalkableMeetings(for: tomorrow)
     }
 
@@ -495,12 +527,16 @@ class CalendarManager: ObservableObject {
         var startComponents = calendar.dateComponents([.year, .month, .day], from: date)
         startComponents.hour = 7
         startComponents.minute = 0
-        let dayStart = calendar.date(from: startComponents)!
+        guard let dayStart = calendar.date(from: startComponents) else {
+            return []
+        }
 
         var endComponents = calendar.dateComponents([.year, .month, .day], from: date)
         endComponents.hour = 22
         endComponents.minute = 0
-        let dayEnd = calendar.date(from: endComponents)!
+        guard let dayEnd = calendar.date(from: endComponents) else {
+            return []
+        }
 
         // Sort events by start time
         let sortedEvents = events.sorted { $0.startDate < $1.startDate }
@@ -545,4 +581,94 @@ class CalendarManager: ObservableObject {
         let totalMinutes = try await getMeetingLoad(for: date)
         return totalMinutes >= threshold // 6+ hours of meetings
     }
+
+    // MARK: - Debug/Testing: Create Sample Events
+
+    #if DEBUG
+    /// Creates sample calendar events for testing the Smart Planner
+    func createSampleEventsForTesting() async throws {
+        guard isAuthorized else {
+            throw CalendarError.accessDenied
+        }
+
+        // Get a writable calendar
+        guard let calendar = eventStore.calendars(for: .event).first(where: { $0.allowsContentModifications }) else {
+            throw CalendarError.noCalendars
+        }
+
+        let today = Calendar.current.startOfDay(for: Date())
+
+        // Helper to create an event
+        func createEvent(title: String, startHour: Int, startMinute: Int = 0, durationMinutes: Int, isAllDay: Bool = false, attendeeCount: Int = 0) {
+            let event = EKEvent(eventStore: eventStore)
+            event.title = title
+            event.calendar = calendar
+
+            var startComponents = Calendar.current.dateComponents([.year, .month, .day], from: today)
+            startComponents.hour = startHour
+            startComponents.minute = startMinute
+
+            event.startDate = Calendar.current.date(from: startComponents)!
+            event.endDate = Calendar.current.date(byAdding: .minute, value: durationMinutes, to: event.startDate)!
+            event.isAllDay = isAllDay
+
+            // Note: Can't add attendees programmatically on iOS, but our CalendarEvent will default to 0
+
+            try? eventStore.save(event, span: .thisEvent)
+            print("DEBUG: Created event '\(title)' at \(startHour):\(String(format: "%02d", startMinute))")
+        }
+
+        print("DEBUG: Creating sample executive schedule...")
+
+        // All-day event (should be IGNORED by autopilot)
+        createEvent(title: "OOO - Team Offsite Week", startHour: 0, durationMinutes: 1440, isAllDay: true)
+
+        // Morning meetings
+        createEvent(title: "Daily Standup", startHour: 9, startMinute: 0, durationMinutes: 15)
+        createEvent(title: "Product Review - Q1 Roadmap", startHour: 9, startMinute: 30, durationMinutes: 60)
+        createEvent(title: "1:1 with Sarah (Engineering)", startHour: 10, startMinute: 30, durationMinutes: 30)
+
+        // Gap from 11:00 - 11:30 (30 min walk slot)
+
+        // Late morning
+        createEvent(title: "Design Review", startHour: 11, startMinute: 30, durationMinutes: 45)
+
+        // Lunch gap from 12:15 - 13:00 (45 min walk slot)
+
+        // Afternoon meetings
+        createEvent(title: "Investor Call Prep", startHour: 13, startMinute: 0, durationMinutes: 30)
+        createEvent(title: "Board Meeting", startHour: 14, startMinute: 0, durationMinutes: 90)
+
+        // Gap from 15:30 - 16:00 (30 min walk slot)
+
+        createEvent(title: "Engineering Sync", startHour: 16, startMinute: 0, durationMinutes: 30)
+
+        // Gap from 16:30 - 17:30 (60 min walk slot!)
+
+        createEvent(title: "Team Happy Hour", startHour: 17, startMinute: 30, durationMinutes: 90)
+
+        print("DEBUG: Sample schedule created with gaps for walks")
+
+        // Refresh events
+        try await fetchTodayEvents()
+    }
+
+    /// Removes all events created today (for cleanup)
+    func clearTodayEvents() async throws {
+        guard isAuthorized else { return }
+
+        let today = Calendar.current.startOfDay(for: Date())
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
+
+        let predicate = eventStore.predicateForEvents(withStart: today, end: tomorrow, calendars: nil)
+        let events = eventStore.events(matching: predicate)
+
+        for event in events {
+            try? eventStore.remove(event, span: .thisEvent)
+        }
+
+        print("DEBUG: Cleared \(events.count) events from today")
+        try await fetchTodayEvents()
+    }
+    #endif
 }

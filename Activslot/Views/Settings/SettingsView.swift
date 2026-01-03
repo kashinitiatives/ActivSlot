@@ -13,6 +13,9 @@ struct SettingsView: View {
     @State private var showCalendarSelection = false
     @State private var showOutlookError = false
     @State private var outlookErrorMessage = ""
+    #if DEBUG
+    @State private var showTestDataGenerator = false
+    #endif
 
     // Time picker states
     @State private var wakeTime: Date = Date()
@@ -567,8 +570,30 @@ struct SettingsView: View {
                     HStack {
                         Text("Version")
                         Spacer()
-                        Text("1.0.0")
+                        Text(Bundle.main.appVersion)
                             .foregroundColor(.secondary)
+                    }
+
+                    NavigationLink {
+                        PrivacyPolicyView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "hand.raised.fill")
+                                .foregroundColor(.blue)
+                                .frame(width: 28)
+                            Text("Privacy Policy")
+                        }
+                    }
+
+                    NavigationLink {
+                        TermsOfServiceView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "doc.text.fill")
+                                .foregroundColor(.gray)
+                                .frame(width: 28)
+                            Text("Terms of Service")
+                        }
                     }
 
                     Button("Reset Onboarding") {
@@ -578,6 +603,53 @@ struct SettingsView: View {
                 } header: {
                     Text("About")
                 }
+
+                #if DEBUG
+                // Debug/Testing Section
+                Section {
+                    Button {
+                        showTestDataGenerator = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "testtube.2")
+                                .foregroundColor(.purple)
+                            Text("Test Data Generator")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                        }
+                    }
+
+                    Button {
+                        Task {
+                            try? await calendarManager.createSampleEventsForTesting()
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "calendar.badge.plus")
+                                .foregroundColor(.blue)
+                            Text("Quick: Create Sample Schedule")
+                        }
+                    }
+
+                    Button {
+                        Task {
+                            try? await calendarManager.clearTodayEvents()
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "trash")
+                                .foregroundColor(.red)
+                            Text("Quick: Clear Today's Events")
+                        }
+                    }
+                } header: {
+                    Text("Debug Tools")
+                } footer: {
+                    Text("Test Data Generator provides comprehensive test scenarios for calendar, HealthKit, and activities")
+                }
+                #endif
             }
             .navigationTitle("Settings")
             .onAppear {
@@ -600,6 +672,11 @@ struct SettingsView: View {
                 CalendarSelectionView()
                     .environmentObject(calendarManager)
             }
+            #if DEBUG
+            .sheet(isPresented: $showTestDataGenerator) {
+                TestDataGeneratorView()
+            }
+            #endif
         }
     }
 

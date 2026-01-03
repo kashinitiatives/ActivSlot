@@ -84,6 +84,19 @@ struct SmartPlanView: View {
         if planner.userPatterns == nil {
             await planner.analyzeUserPatterns()
         }
+
+        #if DEBUG
+        // Auto-create sample events for testing if none exist
+        let calendarManager = CalendarManager.shared
+        if calendarManager.isAuthorized {
+            let events = try? await calendarManager.fetchEvents(for: Date())
+            if events?.isEmpty ?? true {
+                print("DEBUG: No events found, creating sample schedule...")
+                try? await calendarManager.createSampleEventsForTesting()
+            }
+        }
+        #endif
+
         _ = await planner.generateDailyPlan(for: Date())
     }
 
@@ -121,81 +134,102 @@ struct SmartStepProgressCard: View {
                     Text("Step Goal")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
-                    Text("\(plan.estimatedCurrentSteps.formatted()) / \(plan.targetSteps.formatted())")
-                        .font(.title)
-                        .fontWeight(.bold)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("\(plan.estimatedCurrentSteps.formatted())")
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundColor(plan.stepsNeeded == 0 ? .green : .primary)
+                            .contentTransition(.numericText())
+                        Text("/ \(plan.targetSteps.formatted())")
+                            .font(.system(size: 18, weight: .medium, design: .rounded))
+                            .foregroundColor(.secondary)
+                    }
                 }
 
                 Spacer()
 
-                // Confidence indicator
+                // Confidence indicator with label
                 VStack(alignment: .trailing, spacing: 4) {
                     Text("Plan Confidence")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    HStack(spacing: 2) {
+                    HStack(spacing: 3) {
                         ForEach(0..<5) { i in
                             Circle()
-                                .fill(i < Int(plan.confidence * 5) ? Color.green : Color.gray.opacity(0.3))
+                                .fill(i < Int(plan.confidence * 5) ? Color.green : Color.gray.opacity(0.2))
                                 .frame(width: 8, height: 8)
                         }
                     }
                 }
             }
 
-            // Progress ring
+            // Progress ring with gradient
             ZStack {
                 // Background track
                 Circle()
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 12)
+                    .stroke(Color.gray.opacity(0.15), lineWidth: 14)
 
                 // Planned progress (lighter)
                 Circle()
                     .trim(from: 0, to: plannedProgress)
                     .stroke(
-                        Color.green.opacity(0.3),
-                        style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                        Color.green.opacity(0.25),
+                        style: StrokeStyle(lineWidth: 14, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
 
-                // Current progress
+                // Current progress with gradient
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(
-                        Color.green,
-                        style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                        AngularGradient(
+                            colors: [.green.opacity(0.7), .green],
+                            center: .center,
+                            startAngle: .degrees(-90),
+                            endAngle: .degrees(270)
+                        ),
+                        style: StrokeStyle(lineWidth: 14, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
+                    .animation(.easeOut(duration: 0.8), value: progress)
 
                 // Center content
-                VStack(spacing: 4) {
+                VStack(spacing: 6) {
                     if plan.stepsNeeded > 0 {
                         Text("\(plan.stepsNeeded.formatted())")
-                            .font(.title2)
-                            .fontWeight(.bold)
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .contentTransition(.numericText())
                         Text("steps to go")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     } else {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.largeTitle)
-                            .foregroundColor(.green)
+                            .font(.system(size: 44))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [.green, .mint],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .symbolEffect(.bounce, value: plan.stepsNeeded)
                         Text("Goal reached!")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .fontWeight(.medium)
+                            .foregroundColor(.green)
                     }
                 }
             }
-            .frame(height: 150)
+            .frame(height: 160)
             .padding(.vertical, 8)
 
             // Plan summary
-            HStack(spacing: 20) {
+            HStack(spacing: 16) {
+                // Scheduled walks
                 VStack {
                     Text("\(plan.activities.count)")
                         .font(.title3)
                         .fontWeight(.semibold)
-                    Text("Walks planned")
+                    Text("Walks")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -203,11 +237,13 @@ struct SmartStepProgressCard: View {
                 Divider()
                     .frame(height: 30)
 
+                // Steps from scheduled walks
                 VStack {
-                    Text("~\(plan.totalPlannedSteps.formatted())")
+                    let walkSteps = plan.activities.reduce(0) { $0 + $1.estimatedSteps }
+                    Text("~\(walkSteps.formatted())")
                         .font(.title3)
                         .fontWeight(.semibold)
-                    Text("Steps covered")
+                    Text("From walks")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -215,12 +251,27 @@ struct SmartStepProgressCard: View {
                 Divider()
                     .frame(height: 30)
 
+                // Walking meetings
                 VStack {
                     let walkingMeetings = plan.walkableMeetings.filter { $0.isRecommended }.count
                     Text("\(walkingMeetings)")
                         .font(.title3)
                         .fontWeight(.semibold)
-                    Text("Walking meetings")
+                    Text("Walk meetings")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Divider()
+                    .frame(height: 30)
+
+                // Steps from walking meetings
+                VStack {
+                    let meetingSteps = plan.walkableMeetings.filter { $0.isRecommended }.reduce(0) { $0 + $1.estimatedSteps }
+                    Text("~\(meetingSteps.formatted())")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                    Text("From meetings")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -254,16 +305,57 @@ struct DailyPlanSection: View {
                 .font(.headline)
 
             if plan.activities.isEmpty {
+                let meetingSteps = plan.walkableMeetings.filter { $0.isRecommended }.reduce(0) { $0 + $1.estimatedSteps }
+                let goalCoveredByMeetings = plan.stepsNeeded > 0 && meetingSteps >= plan.stepsNeeded
+
                 VStack(spacing: 12) {
-                    Image(systemName: "figure.walk")
-                        .font(.largeTitle)
-                        .foregroundColor(.secondary)
-                    Text("No walks scheduled")
-                        .foregroundColor(.secondary)
-                    Text("Your calendar is packed, but consider walking meetings!")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
+                    if plan.stepsNeeded == 0 {
+                        // User already hit their step goal
+                        Image(systemName: "trophy.fill")
+                            .font(.largeTitle)
+                            .foregroundColor(.yellow)
+                        Text("Goal achieved!")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        Text("You've already hit your step goal today. Keep up the great work!")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    } else if goalCoveredByMeetings && meetingSteps > 0 {
+                        // Walking meetings can cover remaining goal
+                        Image(systemName: "figure.walk.motion")
+                            .font(.largeTitle)
+                            .foregroundColor(.green)
+                        Text("Walking meetings can cover your goal!")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        Text("Take your \(plan.walkableMeetings.filter { $0.isRecommended }.count) recommended meetings as walking calls to hit ~\(meetingSteps.formatted()) steps.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    } else if !plan.walkableMeetings.isEmpty {
+                        // Has walkable meetings but not enough
+                        Image(systemName: "figure.walk")
+                            .font(.largeTitle)
+                            .foregroundColor(.orange)
+                        Text("No walks scheduled")
+                            .foregroundColor(.secondary)
+                        Text("Your calendar is packed, but consider the walking meetings below!")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    } else {
+                        // No walks and no walkable meetings
+                        Image(systemName: "calendar.badge.exclamationmark")
+                            .font(.largeTitle)
+                            .foregroundColor(.secondary)
+                        Text("No walks scheduled")
+                            .foregroundColor(.secondary)
+                        Text("Your calendar is very busy today. Try to find small gaps for quick walks.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)

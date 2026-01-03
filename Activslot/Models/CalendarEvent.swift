@@ -10,6 +10,7 @@ struct CalendarEvent: Identifiable {
     let isOrganizer: Bool
     let location: String?
     let notes: String?
+    let isAllDay: Bool  // From EKEvent.isAllDay
 
     var duration: Int {
         Int(endDate.timeIntervalSince(startDate) / 60)
@@ -23,11 +24,6 @@ struct CalendarEvent: Identifiable {
         "out of office", "ooo", "pto", "vacation", "holiday",
         "focus time", "busy", "blocked", "do not disturb"
     ]
-
-    /// Check if this is an all-day event (24 hours or more)
-    var isAllDay: Bool {
-        duration >= 1440 // 24 hours = 1440 minutes
-    }
 
     /// Keywords that indicate an out-of-office or time-off event
     private static let outOfOfficeKeywords = [
@@ -104,10 +100,11 @@ struct CalendarEvent: Identifiable {
         self.isOrganizer = ekEvent.organizer?.isCurrentUser ?? false
         self.location = ekEvent.location
         self.notes = ekEvent.notes
+        self.isAllDay = ekEvent.isAllDay
     }
 
     init(id: String, title: String, startDate: Date, endDate: Date,
-         attendeeCount: Int, isOrganizer: Bool, location: String? = nil, notes: String? = nil) {
+         attendeeCount: Int, isOrganizer: Bool, location: String? = nil, notes: String? = nil, isAllDay: Bool = false) {
         self.id = id
         self.title = title
         self.startDate = startDate
@@ -116,5 +113,6 @@ struct CalendarEvent: Identifiable {
         self.isOrganizer = isOrganizer
         self.location = location
         self.notes = notes
+        self.isAllDay = isAllDay
     }
 }

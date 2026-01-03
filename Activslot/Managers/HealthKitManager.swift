@@ -32,11 +32,13 @@ class HealthKitManager: ObservableObject {
             throw HealthKitError.notAvailable
         }
 
-        let typesToRead: Set<HKObjectType> = [
-            HKQuantityType.quantityType(forIdentifier: .stepCount)!,
-            HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!,
-            HKObjectType.workoutType()
-        ]
+        var typesToRead: Set<HKObjectType> = [HKObjectType.workoutType()]
+        if let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) {
+            typesToRead.insert(stepType)
+        }
+        if let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
+            typesToRead.insert(energyType)
+        }
 
         return try await withCheckedThrowingContinuation { continuation in
             healthStore.requestAuthorization(toShare: nil, read: typesToRead) { success, error in
@@ -58,15 +60,26 @@ class HealthKitManager: ObservableObject {
             return
         }
 
-        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        // Note: iOS doesn't reveal read authorization status for privacy.
+        // We check if authorization was requested (not .notDetermined) and assume
+        // we can try to read. If user denied, queries will return empty data.
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            isAuthorized = false
+            return
+        }
         let status = healthStore.authorizationStatus(for: stepType)
-        isAuthorized = status == .sharingAuthorized || status == .sharingDenied
+
+        // If status is not .notDetermined, authorization was requested
+        // We set isAuthorized = true to enable UI, actual data access may still be limited
+        isAuthorized = status != .notDetermined
     }
 
     // MARK: - Step Count
 
     func fetchTodaySteps() async throws -> Int {
-        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            throw HealthKitError.dataNotAvailable
+        }
         let now = Date()
         let startOfDay = Calendar.current.startOfDay(for: now)
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
@@ -89,9 +102,13 @@ class HealthKitManager: ObservableObject {
     }
 
     func fetchSteps(for date: Date) async throws -> Int {
-        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            throw HealthKitError.dataNotAvailable
+        }
         let startOfDay = Calendar.current.startOfDay(for: date)
-        let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay)!
+        guard let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay) else {
+            throw HealthKitError.dataNotAvailable
+        }
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -110,8 +127,7 @@ class HealthKitManager: ObservableObject {
 
     func observeStepChanges(completion: @escaping (Int) -> Void) {
         guard isHealthKitAvailable else { return }
-
-        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return }
 
         let query = HKObserverQuery(sampleType: stepType, predicate: nil) { [weak self] _, _, error in
             if error == nil {
@@ -131,7 +147,9 @@ class HealthKitManager: ObservableObject {
     // MARK: - Active Energy
 
     func fetchTodayActiveEnergy() async throws -> Double {
-        let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
+        guard let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) else {
+            throw HealthKitError.dataNotAvailable
+        }
         let now = Date()
         let startOfDay = Calendar.current.startOfDay(for: now)
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
@@ -157,7 +175,9 @@ class HealthKitManager: ObservableObject {
 
     func fetchRecentWorkouts(days: Int = 7) async throws -> [HKWorkout] {
         let workoutType = HKObjectType.workoutType()
-        let startDate = Calendar.current.date(byAdding: .day, value: -days, to: Date())!
+        guard let startDate = Calendar.current.date(byAdding: .day, value: -days, to: Date()) else {
+            throw HealthKitError.dataNotAvailable
+        }
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: Date(), options: .strictStartDate)
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
 
